@@ -19,7 +19,8 @@ this_path = os.path.dirname(os.path.realpath(__file__))
 output_path = os.path.join(this_path, '..', 'userRequestTerrain')
 
 # Where the data database is
-tile_path = os.path.join(this_path, '..', 'data', 'tiles')
+tile_path = os.path.join(this_path, '..', 'data', 'tilesv1')
+tile_path_v2 = os.path.join(this_path, '..', 'data', 'tilesv2')
 
 # The output folder for all gzipped terrain requests
 app = Flask(__name__, static_url_path='/terrain', static_folder=output_path,)
@@ -52,7 +53,11 @@ def compressFiles(fileList, uuidkey):
         os.makedirs(tile_path)
     except OSError:
         pass
-
+    try:
+        os.makedirs(tile_path_v2)
+    except OSError:
+        pass
+        
     try:
         with zipfile.ZipFile(zipthis, 'w') as terrain_zip:
             for fn in fileList:
@@ -93,10 +98,12 @@ def generate():
             lat = float(request.form['lat'])
             lon = float(request.form['long'])
             radius = int(request.form['radius'])
+            version = int(request.form['version'])
             assert lat < 90
             assert lon < 180
             assert lat > -90
             assert lon > -180
+            assert version in [1, 2]
             radius = clamp(radius, 1, 400)
         except:
             print("Bad data")
@@ -113,7 +120,7 @@ def generate():
         done = set()
         for dx in range(-radius, radius):
             for dy in range(-radius, radius):
-                (lat2, lon2) = add_offset(lat*1e7, lon*1e7, dx*1000.0, dy*1000.0)
+                (lat2, lon2) = add_offset(lat*1e7, lon*1e7, dx*1000.0, dy*1000.0, version)
                 lat_int = int(round(lat2 * 1.0e-7))
                 lon_int = int(round(lon2 * 1.0e-7))
                 tag = (lat_int, lon_int)
@@ -122,13 +129,19 @@ def generate():
                 done.add(tag)
                 # make sure tile is inside the 60deg latitude limit
                 if abs(lat_int) <= 60:
-                    filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+                    if version == 1:
+                        filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+                    else:
+                        filelist.append(os.path.join(tile_path_v2, getDatFile(lat_int, lon_int)))
                 else:
                     outsideLat = True
 
         # make sure tile is inside the 60deg latitude limit
         if abs(lat_int) <= 60:
-            filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+            if version == 1:
+                filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+            else:
+                filelist.append(os.path.join(tile_path_v2, getDatFile(lat_int, lon_int)))
         else:
             outsideLat = True
 
