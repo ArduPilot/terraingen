@@ -12,22 +12,27 @@ import shutil
 import struct
 import crc16
 
-from terrain_gen import TERRAIN_GRID_BLOCK_SIZE_Y, east_blocks, IO_BLOCK_SIZE, TERRAIN_GRID_FORMAT_VERSION, GridBlock
+from terrain_gen import IO_BLOCK_SIZE
+
+# avoid annoying crc16 DeprecationWarning
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # IO block size is 2048
 # Actual size is 1821 bytes
 # Last 227 bytes is filling
-def check_filled(block, lat_int, lon_int, grid_spacing):
+def check_filled(block, lat_int, lon_int, grid_spacing, version):
     '''check a block for validity'''
     if len(block) != IO_BLOCK_SIZE - 227:
         print("Bad size {0} of {1}".format(len(block), IO_BLOCK_SIZE))
         return False
-    (bitmap, lat, lon, crc, version, spacing) = struct.unpack("<QiiHHH", block[:22])
+    (bitmap, lat, lon, crc, fileversion, spacing) = struct.unpack("<QiiHHH", block[:22])
+    #print(block[:22])
     if(lat == 0 and lon == 0 and crc == 0 and version == 0 and spacing == 0):
-        #print("Empty block")
-        return True
-    if (str(version) != str(TERRAIN_GRID_FORMAT_VERSION)):
-        print("Bad version: " + str(version))
+        print("Bad block header at block {0}, {1}".format(lat_int, lon_int))
+        return False
+    if (str(fileversion) != str(version)):
+        print("Bad version: " + str(fileversion))
         return False
     if abs(lat_int - (lat/1E7)) > 2 or abs(lon_int - (lon/1E7)) > 2:
         print("Bad lat/lon: {0}, {1}".format((lat/1E7), (lon/1E7)))
@@ -55,6 +60,8 @@ if __name__ == '__main__':
     # Add the arguments
     # Folder to store processed DAT files
     parser.add_argument('-folder', action="store", dest="folder", default="processedTerrain")
+    # File format
+    parser.add_argument("--version", type=int, default=2, choices=[1, 2], help="terrain file version")
     
     args = parser.parse_args()
 
@@ -112,10 +119,11 @@ if __name__ == '__main__':
                     lon_max = -180 * 1.0e7
                     for blocknum in range(total_blocks):
                         block = tile[(blocknum * IO_BLOCK_SIZE):((blocknum + 1)* IO_BLOCK_SIZE)-227]
-                        ret = check_filled(block, lat_int, lon_int, 100)
+                        ret = check_filled(block, lat_int, lon_int, 100, args.version)
                         if not ret:
                             print(file)
                             print("Bad data in block {0} of {1}".format(blocknum, total_blocks))
+                            break
                         else:
                             (lat, lon) = ret
                             lat_min = min(lat_min, lat)
@@ -129,8 +137,8 @@ if __name__ == '__main__':
                     if abs(lat_max-lat_min) < 0.99 or abs(lon_max-lon_min) < 1.00 or abs(lat_max-lat_min) > 1.01 or abs(lon_max-lon_min) > 1.07:
                         print(file)
                         print("Bad tile")                                
-                        print("Tile covers ({0},{1}) to ({2},{3})".format(lat_min, lon_min, lat_max, lon_max))
-                        print("Tile size is ({0:.4f}, {1:.4f}) degrees".format(lat_max-lat_min, lon_max-lon_min))
+                    print("Tile covers ({0},{1}) to ({2},{3})".format(lat_min, lon_min, lat_max, lon_max))
+                    print("Tile size is ({0:.4f}, {1:.4f}) degrees".format(lat_max-lat_min, lon_max-lon_min))
             else:
                 print("Bad tile: " + file)
     print("Done!")
