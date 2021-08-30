@@ -38,4 +38,5 @@ Each user request is given a UUID, which is incorporated into the folder/filenam
 
 To run the unit tests, type ``pytest``
 
+A systemd service is provided for running the WSGI server.
 

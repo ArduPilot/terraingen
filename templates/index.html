@@ -55,7 +55,9 @@
 
         <p>Compatible with Ardupilot Plane 4.0.6+ and Copter 4.0.4+</p>
         
-        <p>To download entire continents of terrain data, see <a href=https://terrain.ardupilot.org/data/continents/>here<a>.</p>
+        <p>Note that ArduPilot 4.0.x and 4.1.x use different terrain file formats.</p>
+        
+        <p>To download entire continents of terrain data, see <a href=https://terrain.ardupilot.org/data/continents/>here for ArduPilot 4.0.x</a> or <a href=https://terrain.ardupilot.org/data/continentsapm41/>here for ArduPilot 4.1.x<a>.</p>
 
         <h2>Terrain Options</h2>
         <form action="/generate" method="post">
@@ -66,6 +68,11 @@
             <label id="radius-label" for="radius">Radius (km):</label><br>
             <input type="range" id="radius" name="radius" value="100" min="1" max="400"
                 oninput="plotCircleCoords(false);"><br>
+            <label for="version">ArduPilot Version:</label>
+            <select name="format" id="format">
+              <option value="1">4.0.x</option>
+              <option value="2">4.1.x and later</option>
+            </select>
             <br>
             <input type="submit" value="Generate" method="post">
         </form>
