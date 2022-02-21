@@ -26,7 +26,6 @@ def test_homepage(client):
     assert b'<input type="text" id="lat" name="lat" value="-35.363261" oninput="plotCircleCoords(true);">' in rv.data
     assert b'<input type="text" id="long" name="long" value="149.165230" oninput="plotCircleCoords(true);">' in rv.data
     assert b'<input type="range" id="radius" name="radius" value="100" min="1" max="400"\n                oninput="plotCircleCoords(false);">' in rv.data
-    assert b'<select name="format" id="format">' in rv.data
     assert b'<input type="submit" value="Generate" method="post">' in rv.data
 
 def test_badinput(client):
@@ -42,8 +41,7 @@ def test_badinput(client):
     #partial input
     rv = client.post('/generate', data=dict(
         lat='-35.363261',
-        long='149.165230',
-        format="2"
+        long='149.165230'
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
@@ -71,18 +69,6 @@ def test_badinput(client):
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
     assert b'Error' in rv.data
     assert b'download="terrain.zip"' not in rv.data
-
-    #bad format
-    rv = client.post('/generate', data=dict(
-        lat='206.56',
-        long='-400',
-        radius='1',
-        format='3'
-    ), follow_redirects=True)
-
-    assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
-    assert b'Error' in rv.data
-    assert b'download="terrain.zip"' not in rv.data
     
 def test_simplegen(client):
     """Test that a small piece of terrain can be generated"""
@@ -91,7 +77,6 @@ def test_simplegen(client):
         lat='-35.363261',
         long='149.165230',
         radius='1',
-        format='1'
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
@@ -114,7 +99,6 @@ def test_simplegenoutside(client):
         lat='-59.363261',
         long='149.165230',
         radius='200',
-        format='2'
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
@@ -137,7 +121,6 @@ def test_multigen(client):
         lat='-35.363261',
         long='149.165230',
         radius='1',
-        format='1'
     ), follow_redirects=True)
     time.sleep(0.1)
 
@@ -145,7 +128,6 @@ def test_multigen(client):
         lat='-35.363261',
         long='147.165230',
         radius='10',
-        format='2'
     ), follow_redirects=True)
     time.sleep(0.1)
 
@@ -153,7 +135,6 @@ def test_multigen(client):
         lat='-30.363261',
         long='137.165230',
         radius='100',
-        format='2'
     ), follow_redirects=True)
     time.sleep(0.1)
 
