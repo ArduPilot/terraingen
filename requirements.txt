@@ -1,0 +1,8 @@
+flask
+wheel
+uwsgi
+numpy
+mavproxy
+crc16
+pytest
+
