@@ -10,7 +10,6 @@ import time
 from flask import Flask
 from flask import render_template
 from flask import request
-from flask import current_app
 
 from terrain_gen import add_offset
 
@@ -21,13 +20,13 @@ this_path = os.path.dirname(os.path.realpath(__file__))
 output_path = os.path.join(this_path, '..', 'userRequestTerrain')
 
 # Where the tile database is
-if "pytest" in sys.modules or current_app.debug:
+if "pytest" in sys.modules:
+    # If we're in test mode, use remote
     tile_path = os.path.join(this_path, '..', 'tilesdat3')
     url_path = 'https://terrain.ardupilot.org/tilesdat3/'
 else:
     tile_path = os.path.join('/mnt/terrain_data/data/tilesdat3')
     url_path = None
-
 
 app = Flask(__name__, static_url_path='/userRequestTerrain', static_folder=output_path,)
 
