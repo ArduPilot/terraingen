@@ -88,7 +88,7 @@ def test_simplegen(client):
     assert uuidkey != ""
 
     #file should be ready for download and around 2MB in size
-    rdown = client.get('/terrain/' + uuidkey + ".zip", follow_redirects=True)
+    rdown = client.get('/userRequestTerrain/' + uuidkey + ".zip", follow_redirects=True)
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (1*1024*1024)
 
@@ -110,7 +110,7 @@ def test_simplegenoutside(client):
     assert uuidkey != ""
 
     #file should be ready for download and around 2MB in size
-    rdown = client.get('/terrain/' + uuidkey + ".zip", follow_redirects=True)
+    rdown = client.get('/userRequestTerrain/' + uuidkey + ".zip", follow_redirects=True)
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (0.25*1024*1024)
 
@@ -150,6 +150,6 @@ def test_multigen(client):
 
     #files should be ready for download and around 0.7MB in size
     for uukey in allUuid:
-        rdown = client.get('/terrain/' + uukey + ".zip", follow_redirects=True)
+        rdown = client.get('/userRequestTerrain/' + uukey + ".zip", follow_redirects=True)
         assert b'404 Not Found' not in rdown.data
         assert len(rdown.data) > (0.7*1024*1024)

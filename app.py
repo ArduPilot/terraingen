@@ -1,5 +1,6 @@
 import uuid
 import os
+import sys
 import zipfile
 import urllib.request
 import gzip
@@ -9,6 +10,7 @@ import time
 from flask import Flask
 from flask import render_template
 from flask import request
+from flask import current_app
 
 from terrain_gen import add_offset
 
@@ -18,12 +20,16 @@ this_path = os.path.dirname(os.path.realpath(__file__))
 # Where the user requested tile are stored
 output_path = os.path.join(this_path, '..', 'userRequestTerrain')
 
-# Where the data database is
-tile_path = os.path.join(this_path, '..', 'data', 'tilesapm41')
-url_path = 'https://terrain.ardupilot.org/data/tilesapm41/'
+# Where the tile database is
+if "pytest" in sys.modules or current_app.debug:
+    tile_path = os.path.join(this_path, '..', 'tilesdat3')
+    url_path = 'https://terrain.ardupilot.org/tilesdat3/'
+else:
+    tile_path = os.path.join('/mnt/terrain_data/data/tilesdat3')
+    url_path = None
 
-# The output folder for all gzipped terrain requests
-app = Flask(__name__, static_url_path='/terrain', static_folder=output_path,)
+
+app = Flask(__name__, static_url_path='/userRequestTerrain', static_folder=output_path,)
 
 def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))
@@ -57,7 +63,7 @@ def compressFiles(fileList, uuidkey, format):
     try:
         with zipfile.ZipFile(zipthis, 'w') as terrain_zip:
             for fn in fileList:
-                if not os.path.exists(fn):
+                if not os.path.exists(fn) and url_path != None:
                     #download if required
                     print("Downloading " + os.path.basename(fn))
                     g = urllib.request.urlopen(url_path +
@@ -148,7 +154,7 @@ def generate():
 
         if success:
             print("Generated " + "/terrain/" + uuidkey + ".zip")
-            return render_template('generate.html', urlkey="/terrain/" + uuidkey + ".zip",
+            return render_template('generate.html', urlkey="/userRequestTerrain/" + uuidkey + ".zip",
                                    uuidkey=uuidkey, outsideLat=outsideLat)
         else:
             print("Failed " + "/terrain/" + uuidkey + ".zip")
