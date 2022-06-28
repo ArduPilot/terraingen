@@ -37,7 +37,7 @@ def check_filled(block, lat_int, lon_int, grid_spacing, format):
     if abs(lat_int - (lat/1E7)) > 2 or abs(lon_int - (lon/1E7)) > 2:
         print("Bad lat/lon: {0}, {1}".format((lat/1E7), (lon/1E7)))
         return False
-    if spacing != 100:
+    if spacing != grid_spacing:
         print("Bad spacing: " + str(spacing))
         return False
     if bitmap != (1<<56)-1:
@@ -62,13 +62,12 @@ if __name__ == '__main__':
     parser.add_argument('-folder', action="store", dest="folder", default="processedTerrain")
     # File format
     parser.add_argument("--format", type=str, default="4.1", choices=["pre-4.1", "4.1"], help="Ardupilot version")
+    # Spacing
+    parser.add_argument('--spacing', type=int, default=30)
     
     args = parser.parse_args()
 
     targetFolder = os.path.join(os.getcwd(), args.folder)
-
-    grid_spacing = 100
-    
 
     #for each file in folder
     for file in os.listdir(targetFolder):
@@ -108,7 +107,7 @@ if __name__ == '__main__':
                     total_blocks = int(len(tile) / IO_BLOCK_SIZE)
                 else:
                     print("Bad file size: {0}. {1} extra bytes at end".format(file, len(tile), len(tile) % IO_BLOCK_SIZE))
-                if total_blocks > 6000 or total_blocks < 900:
+                if (args.spacing == 100 and total_blocks > 6000 or total_blocks < 900) or (args.spacing == 30 and total_blocks > 52000 or total_blocks < 8100):
                     print(file)
                     print("Error: Has {0} blocks".format(total_blocks))
                 # 2b. Does each block have the correct CRC and fields?
@@ -119,7 +118,7 @@ if __name__ == '__main__':
                     lon_max = -180 * 1.0e7
                     for blocknum in range(total_blocks):
                         block = tile[(blocknum * IO_BLOCK_SIZE):((blocknum + 1)* IO_BLOCK_SIZE)-227]
-                        ret = check_filled(block, lat_int, lon_int, 100, args.format)
+                        ret = check_filled(block, lat_int, lon_int, args.spacing, args.format)
                         if not ret:
                             print(file)
                             print("Bad data in block {0} of {1}".format(blocknum, total_blocks))

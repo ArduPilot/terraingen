@@ -13,17 +13,17 @@ import time
 import gzip
 import shutil
 
-from MAVProxy.modules.mavproxy_map import srtm
+import srtm
 from terrain_gen import create_degree
 
-def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format):
+def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, spacing):
     # only create if the output file does not exists
     if os.path.exists(datafile(lat, long, targetFolder) + '.gz'):
         print("Skipping existing compressed tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
         return
 
     if not os.path.exists(datafile(lat, long, targetFolder)):
-        if not create_degree(downloader, lat, long, targetFolder, 100, format):
+        if not create_degree(downloader, lat, long, targetFolder, spacing, format):
             #print("Skipping not downloaded tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
             time.sleep(0.2)
             return
@@ -71,7 +71,7 @@ def get_size(start_path = '.'):
     return total_size
 
 def error_handler(e):
-    print('Worker exception: {0}'.format(exc))
+    print('Worker exception: {0}'.format(e))
     
 if __name__ == '__main__':
     global filelistDownloadActive
@@ -89,7 +89,10 @@ if __name__ == '__main__':
     parser.add_argument('-latitude', action="store", dest="latitude", type=int, default=60)
     # File format
     parser.add_argument("--format", type=str, default="4.1", choices=["pre-4.1", "4.1"], help="Ardupilot version")
-
+    # Source database
+    parser.add_argument("--database", type=str, default="SRTM1", choices=["SRTM1", "SRTM3"])
+    # Cache dir
+    parser.add_argument('--cachedir', action="store", default=None)
     args = parser.parse_args()
 
     targetFolder = os.path.join(os.getcwd(), args.folder)
@@ -103,15 +106,21 @@ if __name__ == '__main__':
 
     # store the threads
     processes = []
+    
+    # Spacing
+    if args.database == "SRTM1":
+        spacing = 30
+    else:
+        spacing = 100
 
-    downloader = srtm.SRTMDownloader(debug=False, offline=(1 if args.offline else 0))
+    downloader = srtm.SRTMDownloader(debug=False, offline=(1 if args.offline else 0), directory=args.database, cachedir=args.cachedir)
     downloader.loadFileList()
     
     # make tileID's
     tileID = []
     i = 0
-    for long in range(-180, 180):
-        for lat in range (-(args.latitude+1), args.latitude+1):
+    for long in range(148, 150):
+        for lat in range (-37, -35):
             tileID.append([lat, long, i]) 
             i += 1
 
@@ -121,7 +130,7 @@ if __name__ == '__main__':
 
     # Use a pool of workers to process
     with ThreadPool(args.processes-1) as p:
-        reslist = [p.apply_async(worker, args=(downloader, td[0], td[1], targetFolder, td[2], len(tileID), args.format), error_callback=error_handler) for td in tileID]
+        reslist = [p.apply_async(worker, args=(downloader, td[0], td[1], targetFolder, td[2], len(tileID), args.format, spacing), error_callback=error_handler) for td in tileID]
         for result in reslist:
             result.get()
 
