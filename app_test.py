@@ -27,6 +27,7 @@ def test_homepage(client):
     assert b'<input type="text" id="long" name="long" value="149.165230" oninput="plotCircleCoords(true);">' in rv.data
     assert b'<input type="range" id="radius" name="radius" value="100" min="1" max="400"\n                oninput="plotCircleCoords(false);">' in rv.data
     assert b'<input type="submit" value="Generate" method="post">' in rv.data
+    assert b'<select name="version" id="version">' in rv.data
 
 def test_badinput(client):
     """Test bad inputs"""
@@ -41,7 +42,8 @@ def test_badinput(client):
     #partial input
     rv = client.post('/generate', data=dict(
         lat='-35.363261',
-        long='149.165230'
+        long='149.165230',
+        version="1"
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
@@ -53,6 +55,7 @@ def test_badinput(client):
         lat='I am bad data',
         long='echo test',
         radius='1',
+        version="1"
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
@@ -64,24 +67,26 @@ def test_badinput(client):
         lat='206.56',
         long='-400',
         radius='1',
+        version="3"
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
     assert b'Error' in rv.data
     assert b'download="terrain.zip"' not in rv.data
     
-def test_simplegen(client):
-    """Test that a small piece of terrain can be generated"""
+def test_simplegen_1(client):
+    """Test that a small piece of terrain can be generated, SRTM1"""
 
     rv = client.post('/generate', data=dict(
-        lat='-35.363261',
-        long='149.165230',
+        lat='60.363261',
+        long='167.165230',
         radius='1',
+        version="1"
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
     assert b'Error' not in rv.data
-    assert b'Tiles outside of +60 to -60 latitude were requested' not in rv.data
+    assert b'Tiles were requested which are not covered by the terrain database' not in rv.data
     assert b'download="terrain.zip"' in rv.data
 
     uuidkey = (rv.data.split(b"footer")[1][1:-2]).decode("utf-8")
@@ -92,18 +97,42 @@ def test_simplegen(client):
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (1*1024*1024)
 
+def test_simplegen_3(client):
+    """Test that a small piece of terrain can be generated, SRTM3"""
+
+    rv = client.post('/generate', data=dict(
+        lat='-35.363261',
+        long='149.165230',
+        radius='1',
+        version="3"
+    ), follow_redirects=True)
+
+    assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
+    assert b'Error' not in rv.data
+    assert b'Tiles were requested which are not covered by the terrain database' not in rv.data
+    assert b'download="terrain.zip"' in rv.data
+
+    uuidkey = (rv.data.split(b"footer")[1][1:-2]).decode("utf-8")
+    assert uuidkey != ""
+
+    #file should be ready for download and around 2MB in size
+    rdown = client.get('/userRequestTerrain/' + uuidkey + ".zip", follow_redirects=True)
+    assert b'404 Not Found' not in rdown.data
+    assert len(rdown.data) > (1*1024*1024)
+    
 def test_simplegenoutside(client):
-    """Test that a small piece of terrain can be generated with partial outside +-60latitude"""
+    """Test that a small piece of terrain can be generated with partial outside +-60latitude for SRTM3"""
 
     rv = client.post('/generate', data=dict(
         lat='-59.363261',
         long='149.165230',
         radius='200',
+        version="3"
     ), follow_redirects=True)
 
     assert b'<title>ArduPilot Terrain Generator</title>' in rv.data
     assert b'Error' not in rv.data
-    assert b'Tiles outside of +60 to -60 latitude were requested' in rv.data
+    assert b'Tiles were requested which are not covered by the terrain database' in rv.data
     assert b'download="terrain.zip"' in rv.data
 
     uuidkey = (rv.data.split(b"footer")[1][1:-2]).decode("utf-8")
@@ -121,6 +150,7 @@ def test_multigen(client):
         lat='-35.363261',
         long='149.165230',
         radius='1',
+        version="3"
     ), follow_redirects=True)
     time.sleep(0.1)
 
@@ -128,6 +158,7 @@ def test_multigen(client):
         lat='-35.363261',
         long='147.165230',
         radius='10',
+        version="1"
     ), follow_redirects=True)
     time.sleep(0.1)
 
@@ -135,6 +166,7 @@ def test_multigen(client):
         lat='-30.363261',
         long='137.165230',
         radius='100',
+        version="3"
     ), follow_redirects=True)
     time.sleep(0.1)
 

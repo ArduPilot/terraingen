@@ -9,7 +9,8 @@ then need to unzip to a "terrain" folder on the SD card in their flight controll
 
 ## Pre-generation of Terrain
 
-To ensure the website operates responsively, the terrain for the whole (-60 -> +60 latitude) world
+To ensure the website operates responsively, the terrain for the whole (-60 -> +60 latitude for SRTM3, 
+-84 -> +84 latitude for SRTM1) world
 must be pregenerated. This will take some time.
 
 Run ``offline_gen.py`` to download the SRTM files from ardupilot.org and convert them to the dat
