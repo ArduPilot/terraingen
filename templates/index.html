@@ -47,16 +47,21 @@
         <title>ArduPilot Terrain Generator</title>
         <h1>ArduPilot Terrain Generator</h1>
 
-        <p>Use this to generate terrain to put on your SD card. The generated terrain is based on the SRTM data and has
-            100m
-            horizontal resolution. It covers all areas between 0 and 60 degrees North/South latitude.</p>
-
-        <p>Multiple generated files can be combined on the SD card.</p>
+        <p>Use this to generate terrain to put on your SD card. There are 2 dataset versions available:</p>
+        <ul>
+            <li>SRTM3: Based on NASA's SRTM data and has 100m (3 arc-second)
+            horizontal resolution. It covers all areas between 0 and 60 degrees North/South latitude.</li>
+            <li>SRTM1: Based on JAXA's ALOS dataset and has 30m (1 arc-second)
+            horizontal resolution. It covers all areas between 0 and 84 degrees North/South latitude.</li>
+        </ul>
+        
+        <p>Multiple generated files of the same dataset version can be combined on the SD card.</p>
 
         <p>Compatible with Ardupilot 4.1+</p>
         
+        <p>To download entire continents of SRTM3 terrain data, see <a href=https://terrain.ardupilot.org/continentsdat3/>here<a>.</p>
         
-        <p>To download entire continents of terrain data, see <a href=https://terrain.ardupilot.org/continentsdat3/>here<a>.</p>
+        <p>If using the SRTM1 data, set ArduPilot's TERRAIN_SPACING parameter to 30 <i>before</i> loading the data to the SD card.</p>
 
         <h2>Terrain Options</h2>
         <form action="/generate" method="post">
@@ -67,6 +72,11 @@
             <label id="radius-label" for="radius">Radius (km):</label><br>
             <input type="range" id="radius" name="radius" value="100" min="1" max="400"
                 oninput="plotCircleCoords(false);"><br>
+            <label for="version">Terrain Version:</label>
+            <select name="version" id="version">
+              <option value="1">SRTM1 (30m res)</option>
+              <option value="3">SRTM3 (90m res)</option>
+            </select>
             <br>
             <input type="submit" value="Generate" method="post">
         </form>
@@ -84,7 +94,7 @@
     }).addTo(mymap);
 
     mymap.on('click', function (e) {
-        document.getElementById("lat").value = Math.max(-60, Math.min(60, e.latlng.lat))
+        document.getElementById("lat").value = Math.max(-84, Math.min(84, e.latlng.lat))
         var longitude = e.latlng.lng
         // leaflet allows infinite longitudes, this wraps it to [-180, 180]
         while (longitude > 180) {

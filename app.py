@@ -22,10 +22,13 @@ output_path = os.path.join(this_path, '..', 'userRequestTerrain')
 # Where the tile database is
 if "pytest" in sys.modules:
     # If we're in test mode, use remote
-    tile_path = os.path.join(this_path, '..', 'tilesdat3')
-    url_path = 'https://terrain.ardupilot.org/tilesdat3/'
+    tile_path1 = os.path.join(this_path, '..', 'tilesdat1')
+    url_path1 = 'https://terrain.ardupilot.org/tilesdat1/'
+    tile_path3 = os.path.join(this_path, '..', 'tilesdat3')
+    url_path3 = 'https://terrain.ardupilot.org/tilesdat3/'
 else:
-    tile_path = os.path.join('/mnt/terrain_data/data/tilesdat3')
+    tile_path3 = os.path.join('/mnt/terrain_data/data/tilesdat3')
+    tile_path1 = os.path.join('/mnt/terrain_data/data/tilesdat1')
     url_path = None
 
 app = Flask(__name__, static_url_path='/userRequestTerrain', static_folder=output_path,)
@@ -45,7 +48,7 @@ def getDatFile(lat, lon):
         EW = 'E'
     return "%c%02u%c%03u.DAT.gz" % (NS, min(abs(int(lat)), 99), EW, min(abs(int(lon)), 999))
 
-def compressFiles(fileList, uuidkey, format):
+def compressFiles(fileList, uuidkey, version):
     # create a zip file comprised of dat.gz tiles
     zipthis = os.path.join(output_path, uuidkey + '.zip')
 
@@ -54,11 +57,19 @@ def compressFiles(fileList, uuidkey, format):
         os.makedirs(output_path)
     except OSError:
         pass
-    try:
-        os.makedirs(tile_path)
-    except OSError:
-        pass
-        
+    if version == 1:
+        url_path = url_path1
+        try:
+            os.makedirs(tile_path1)
+        except OSError:
+            pass
+    elif version == 3:
+        url_path = url_path3
+        try:
+            os.makedirs(tile_path3)
+        except OSError:
+            pass
+            
     try:
         with zipfile.ZipFile(zipthis, 'w') as terrain_zip:
             for fn in fileList:
@@ -99,10 +110,12 @@ def generate():
             lat = float(request.form['lat'])
             lon = float(request.form['long'])
             radius = int(request.form['radius'])
+            version = int(request.form['version'])
             assert lat < 90
             assert lon < 180
             assert lat > -90
             assert lon > -180
+            assert version in [1, 3]
             radius = clamp(radius, 1, 400)
         except:
             print("Bad data")
@@ -117,6 +130,9 @@ def generate():
         # get a list of files required to cover area
         filelist = []
         done = set()
+        
+        format = "4.1"
+        
         for dx in range(-radius, radius):
             for dy in range(-radius, radius):
                 (lat2, lon2) = add_offset(lat*1e7, lon*1e7, dx*1000.0, dy*1000.0, format)
@@ -126,15 +142,19 @@ def generate():
                 if tag in done:
                     continue
                 done.add(tag)
-                # make sure tile is inside the 60deg latitude limit
-                if abs(lat_int) <= 60:
-                    filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+                # make sure tile is inside the 60deg latitude limit for SRTM3 and 84deg for SRTM1
+                if version == 3 and abs(lat_int) <= 60:
+                    filelist.append(os.path.join(tile_path3, getDatFile(lat_int, lon_int)))
+                elif version == 1 and abs(lat_int) <= 84:
+                    filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
                 else:
                     outsideLat = True
 
-        # make sure tile is inside the 60deg latitude limit
-        if abs(lat_int) <= 60:
-            filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
+        # make sure tile is inside the 60deg/84deg latitude limit
+        if version == 3 and abs(lat_int) <= 60:
+            filelist.append(os.path.join(tile_path3, getDatFile(lat_int, lon_int)))
+        elif version == 1 and abs(lat_int) <= 84:
+            filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
         else:
             outsideLat = True
 
@@ -143,7 +163,7 @@ def generate():
         print(filelist)
 
         #compress
-        success = compressFiles(filelist, uuidkey, format)
+        success = compressFiles(filelist, uuidkey, version)
 
         # as a cleanup, remove any generated terrain older than 24H
         for f in os.listdir(output_path):
