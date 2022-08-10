@@ -10,6 +10,9 @@ import time
 from flask import Flask
 from flask import render_template
 from flask import request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from terrain_gen import add_offset
 
@@ -21,7 +24,7 @@ output_path = os.path.join(this_path, '..', 'userRequestTerrain')
 
 # Where the tile database is
 if "pytest" in sys.modules:
-    # If we're in test mode, use remote
+    # If we're in test mode, use remote URL, not local filesystem
     tile_path1 = os.path.join(this_path, '..', 'tilesdat1')
     url_path1 = 'https://terrain.ardupilot.org/tilesdat1/'
     tile_path3 = os.path.join(this_path, '..', 'tilesdat3')
@@ -29,9 +32,18 @@ if "pytest" in sys.modules:
 else:
     tile_path3 = os.path.join('/mnt/terrain_data/data/tilesdat3')
     tile_path1 = os.path.join('/mnt/terrain_data/data/tilesdat1')
-    url_path = None
+    url_path1 = None
+    url_path3 = None
 
 app = Flask(__name__, static_url_path='/userRequestTerrain', static_folder=output_path,)
+# for example if the request goes through one proxy
+# before hitting your application server
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 def clamp(n, smallest, largest):
     return max(smallest, min(n, largest))

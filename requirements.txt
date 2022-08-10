@@ -5,4 +5,4 @@ numpy
 mavproxy
 crc16
 pytest
-
+Flask-Limiter==2.0.3
