@@ -136,7 +136,7 @@ def generate():
         # UUID for this terrain generation
         uuidkey = str(uuid.uuid1())
 
-        # Flag for if user wanted a tile outside +-60deg latitude
+        # Flag for if user wanted a tile outside +-84deg latitude
         outsideLat = None
 
         # get a list of files required to cover area
@@ -154,18 +154,14 @@ def generate():
                 if tag in done:
                     continue
                 done.add(tag)
-                # make sure tile is inside the 60deg latitude limit for SRTM3 and 84deg for SRTM1
-                if version == 3 and abs(lat_int) <= 60:
-                    filelist.append(os.path.join(tile_path3, getDatFile(lat_int, lon_int)))
-                elif version == 1 and abs(lat_int) <= 84:
+                # make sure tile is inside the 84deg lat limit
+                if abs(lat_int) <= 84:
                     filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
                 else:
                     outsideLat = True
 
-        # make sure tile is inside the 60deg/84deg latitude limit
-        if version == 3 and abs(lat_int) <= 60:
-            filelist.append(os.path.join(tile_path3, getDatFile(lat_int, lon_int)))
-        elif version == 1 and abs(lat_int) <= 84:
+        # make sure tile is inside the 84deg latitude limit
+        if abs(lat_int) <= 84:
             filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
         else:
             outsideLat = True
