@@ -121,10 +121,10 @@ def test_simplegen_3(client):
     assert len(rdown.data) > (1*1024*1024)
     
 def test_simplegenoutside(client):
-    """Test that a small piece of terrain can be generated with partial outside +-60latitude for SRTM3"""
+    """Test that a small piece of terrain can be generated with partial outside +-84latitude for SRTM3"""
 
     rv = client.post('/generate', data=dict(
-        lat='-59.363261',
+        lat='-83.363261',
         long='149.165230',
         radius='200',
         version="3"
