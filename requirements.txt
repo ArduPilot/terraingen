@@ -3,6 +3,6 @@ wheel
 uwsgi
 numpy
 mavproxy
-crc16
+fastcrc
 pytest
 Flask-Limiter==2.0.3
