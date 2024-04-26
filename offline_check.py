@@ -3,8 +3,6 @@
 Check a set of terrain files for corruption
 '''
 import os
-#from multiprocessing import Pool
-from multiprocessing.pool import ThreadPool
 import argparse
 import time
 import gzip
@@ -69,10 +67,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     targetFolder = os.path.join(os.getcwd(), args.folder)
+    total_errors = 0
 
     #for each file in folder
-    for file in os.listdir(targetFolder):
-        print("Checking %s" % file)
+    filelist = os.listdir(targetFolder)
+    for idx in range(len(filelist)):
+        file = filelist[idx]
+        print("Checking %s errors=%u %u/%u" % (file, total_errors, idx, len(filelist)))
         if file.endswith("DAT.gz") or file.endswith("DAT"):
             # It's a compressed tile
             # 1. Check it's a valid gzip
@@ -94,6 +95,8 @@ if __name__ == '__main__':
             except Exception as e:
                 print("Bad file: " + file)
                 print(e)
+                total_errors += 1
+                continue
             # 2. Is it a valid dat file?
             if (tile):
                 
@@ -109,8 +112,19 @@ if __name__ == '__main__':
                     total_blocks = int(len(tile) / IO_BLOCK_SIZE)
                 else:
                     print("Bad file size: {0}. {1} extra bytes at end".format(file, len(tile), len(tile) % IO_BLOCK_SIZE))
-                if (args.spacing == 100 and total_blocks > 6000 or total_blocks < 900) or (args.spacing == 30 and total_blocks > 52000 or total_blocks < 7000):
-                    print("Error: %s has %s blocks" % (file, total_blocks))
+                    total_errors += 1
+
+                min_blocks = 450
+                max_blocks = 6000
+                if abs(lat_int) >= 78:
+                    min_blocks = 200
+                if args.spacing == 30:
+                    min_blocks *= 9
+                    max_blocks *= 6000
+
+                if total_blocks > max_blocks or total_blocks < min_blocks:
+                    print("Error: %s has %s blocks (range %u to %u)" % (file, total_blocks, min_blocks, max_blocks))
+                    total_errors += 1
                 # 2b. Does each block have the correct CRC and fields?
                 if total_blocks != 0:
                     lat_min = 90 * 1.0e7
@@ -125,6 +139,7 @@ if __name__ == '__main__':
                         if not ret:
                             print(file)
                             print("Bad data in block {0} of {1}".format(blocknum, total_blocks))
+                            total_errors += 1
                             break
                         else:
                             (lat, lon) = ret
@@ -136,11 +151,19 @@ if __name__ == '__main__':
                     lat_max *= 1.0e-7
                     lon_min *= 1.0e-7
                     lon_max *= 1.0e-7
-                    if abs(lat_max-lat_min) < 0.99 or abs(lon_max-lon_min) < 1.00 or abs(lat_max-lat_min) > 1.01 or abs(lon_max-lon_min) > 1.07:
-                        print(file)
-                        print("Bad tile")                                
-                    print("Tile covers ({0},{1}) to ({2},{3})".format(lat_min, lon_min, lat_max, lon_max))
-                    print("Tile size is ({0:.4f}, {1:.4f}) degrees".format(lat_max-lat_min, lon_max-lon_min))
+                    lat_range = abs(lat_max-lat_min)
+                    lon_range = abs(lon_max-lon_min)
+                    allow_lat_range = (0.99, 1.01)
+                    allow_lon_range = (1.00, 1.08)
+                    if abs(lat_int) > 60:
+                        allow_lat_range = (0.99, 1.01)
+                        allow_lon_range = (1.00, 1.4)
+                    if lat_range < allow_lat_range[0] or lon_range < allow_lon_range[0] or lat_range > allow_lat_range[1] or lon_range > allow_lon_range[1]:
+                        print("Bad tile %s has bad range latrange=%.3f lonrange=%.3f" % (file, lat_range, lon_range), allow_lat_range, allow_lon_range)
+                        total_errors += 1
+                    if args.verbose:
+                        print("Tile covers ({0},{1}) to ({2},{3})".format(lat_min, lon_min, lat_max, lon_max))
+                        print("Tile size is ({0:.4f}, {1:.4f}) degrees".format(lat_max-lat_min, lon_max-lon_min))
             else:
                 print("Bad tile: " + file)
     print("Done!")
