@@ -160,12 +160,6 @@ def generate():
                 else:
                     outsideLat = True
 
-        # make sure tile is inside the 84deg latitude limit
-        if abs(lat_int) <= 84:
-            filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
-        else:
-            outsideLat = True
-
         # remove duplicates
         filelist = list(dict.fromkeys(filelist))
         print(filelist)
