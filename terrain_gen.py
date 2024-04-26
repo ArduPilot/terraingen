@@ -4,13 +4,12 @@ create ardupilot terrain database files
 '''
 
 import math, struct, os
-import crc16, time, struct
+import time, struct
+import fastcrc
+
+crc16 = fastcrc.crc16.xmodem
 
 from MAVProxy.modules.mavproxy_map import srtm
-
-# avoid annoying crc16 DeprecationWarning
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # MAVLink sends 4x4 grids
 TERRAIN_GRID_MAVLINK_SIZE = 4
@@ -246,7 +245,7 @@ class DataFile(object):
         self.seek_offset(block)
         block.crc = 0
         buf = self.pack(block)
-        block.crc = crc16.crc16xmodem(buf[:IO_BLOCK_DATA_SIZE])
+        block.crc = crc16(buf[:IO_BLOCK_DATA_SIZE])
         buf = self.pack(block)
         self.fh.write(buf)
 
@@ -264,7 +263,7 @@ class DataFile(object):
             bitmap != (1<<56)-1):
             return False
         buf = buf[:16] + struct.pack("<H", 0) + buf[18:]
-        crc2 = crc16.crc16xmodem(buf[:1821])
+        crc2 = crc16(buf[:1821])
         if crc2 != crc:
             return False
         return True
@@ -312,7 +311,7 @@ def create_degree(downloader, lat, lon, folder, grid_spacing, format):
                         continue
                     if waited:
                         print("downloaded %d,%d" % (lat2_int, lon2_int))
-                    print("Creating for %d %d" % (lat_int, lon_int))
+                    print("Creating for %d %d with spacing %u" % (lat_int, lon_int, grid_spacing))
                     tiles[tile_idx] = tile
                 if isinstance(tile, srtm.SRTMOceanTile):
                     # if it's a blank ocean tile, there's a quicker way to generate the tile

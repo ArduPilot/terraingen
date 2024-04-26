@@ -10,13 +10,12 @@ import time
 import gzip
 import shutil
 import struct
-import crc16
+import fastcrc
 
-from terrain_gen import IO_BLOCK_SIZE, TERRAIN_GRID_FORMAT_VERSION
+crc16 = fastcrc.crc16.xmodem
 
-# avoid annoying crc16 DeprecationWarning
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+TERRAIN_GRID_FORMAT_VERSION = 1
+IO_BLOCK_SIZE = 2048
 
 # IO block size is 2048
 # Actual size is 1821 bytes
@@ -38,14 +37,15 @@ def check_filled(block, lat_int, lon_int, grid_spacing, format):
         print("Bad lat/lon: {0}, {1}".format((lat/1E7), (lon/1E7)))
         return False
     if spacing != grid_spacing:
-        print("Bad spacing: " + str(spacing))
+        print("Bad spacing: %u should be %u" % (spacing, grid_spacing))
         return False
     if bitmap != (1<<56)-1:
         print("Bad bitmap")
         return False
 
     block = block[:16] + struct.pack("<H", 0) + block[18:]
-    crc2 = crc16.crc16xmodem(block[:1821])
+
+    crc2 = crc16(block[:1821])
     if crc2 != crc:
         print("Bad CRC")
         return False
@@ -64,13 +64,15 @@ if __name__ == '__main__':
     parser.add_argument("--format", type=str, default="4.1", choices=["pre-4.1", "4.1"], help="Ardupilot version")
     # Spacing
     parser.add_argument('--spacing', type=int, default=30)
-    
+    parser.add_argument('--verbose', action='store_true')
+
     args = parser.parse_args()
 
     targetFolder = os.path.join(os.getcwd(), args.folder)
 
     #for each file in folder
     for file in os.listdir(targetFolder):
+        print("Checking %s" % file)
         if file.endswith("DAT.gz") or file.endswith("DAT"):
             # It's a compressed tile
             # 1. Check it's a valid gzip
@@ -107,9 +109,8 @@ if __name__ == '__main__':
                     total_blocks = int(len(tile) / IO_BLOCK_SIZE)
                 else:
                     print("Bad file size: {0}. {1} extra bytes at end".format(file, len(tile), len(tile) % IO_BLOCK_SIZE))
-                if (args.spacing == 100 and total_blocks > 6000 or total_blocks < 900) or (args.spacing == 30 and total_blocks > 52000 or total_blocks < 8100):
-                    print(file)
-                    print("Error: Has {0} blocks".format(total_blocks))
+                if (args.spacing == 100 and total_blocks > 6000 or total_blocks < 900) or (args.spacing == 30 and total_blocks > 52000 or total_blocks < 7000):
+                    print("Error: %s has %s blocks" % (file, total_blocks))
                 # 2b. Does each block have the correct CRC and fields?
                 if total_blocks != 0:
                     lat_min = 90 * 1.0e7
@@ -117,6 +118,8 @@ if __name__ == '__main__':
                     lon_min = 180 * 1.0e7
                     lon_max = -180 * 1.0e7
                     for blocknum in range(total_blocks):
+                        if args.verbose:
+                            print("Checking block %u/%u" % (blocknum, total_blocks))
                         block = tile[(blocknum * IO_BLOCK_SIZE):((blocknum + 1)* IO_BLOCK_SIZE)-227]
                         ret = check_filled(block, lat_int, lon_int, args.spacing, args.format)
                         if not ret:
