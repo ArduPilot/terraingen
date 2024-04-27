@@ -69,6 +69,7 @@ def compressFiles(fileList, uuidkey, version):
         os.makedirs(output_path)
     except OSError:
         pass
+    version = int(version)
     if version == 1:
         url_path = url_path1
         try:
@@ -81,6 +82,8 @@ def compressFiles(fileList, uuidkey, version):
             os.makedirs(tile_path3)
         except OSError:
             pass
+
+    print("compressFiles: version=%u url_path=%s" % (version, url_path))
             
     try:
         with zipfile.ZipFile(zipthis, 'w') as terrain_zip:
@@ -133,6 +136,9 @@ def generate():
             print("Bad data")
             return render_template('generate.html', error="Error with input")
 
+        version = int(version)
+        print("Generate: %.9f %.9f %.3f version=%u" % (lat, lon, radius, version))
+
         # UUID for this terrain generation
         uuidkey = str(uuid.uuid1())
 
@@ -145,6 +151,12 @@ def generate():
         
         format = "4.1"
         
+
+        if version == 1:
+            tile_path = tile_path1
+        else:
+            tile_path = tile_path3
+
         for dx in range(-radius, radius):
             for dy in range(-radius, radius):
                 (lat2, lon2) = add_offset(lat*1e7, lon*1e7, dx*1000.0, dy*1000.0, format)
@@ -156,7 +168,7 @@ def generate():
                 done.add(tag)
                 # make sure tile is inside the 84deg lat limit
                 if abs(lat_int) <= 84:
-                    filelist.append(os.path.join(tile_path1, getDatFile(lat_int, lon_int)))
+                    filelist.append(os.path.join(tile_path, getDatFile(lat_int, lon_int)))
                 else:
                     outsideLat = True
 
