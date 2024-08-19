@@ -1,6 +1,8 @@
+import io
 import os
 import time
 import pytest
+import zipfile
 
 from app import app
 
@@ -97,6 +99,12 @@ def test_simplegen_1(client):
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (1*1024*1024)
 
+    # check file has the appropriate data files inside it
+    file_like_object = io.BytesIO(rdown.data)
+    with zipfile.ZipFile(file_like_object) as zip_file:
+        file_list = zip_file.namelist()
+        assert file_list == ['N60E167.DAT']
+
 def test_simplegen_3(client):
     """Test that a small piece of terrain can be generated, SRTM3"""
 
@@ -119,6 +127,12 @@ def test_simplegen_3(client):
     rdown = client.get('/userRequestTerrain/' + uuidkey + ".zip", follow_redirects=True)
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (1*1024*1024)
+
+    # check file has the appropriate data files inside it
+    file_like_object = io.BytesIO(rdown.data)
+    with zipfile.ZipFile(file_like_object) as zip_file:
+        file_list = zip_file.namelist()
+        assert file_list == ['S36E149.DAT']
     
 def test_simplegenoutside(client):
     """Test that a small piece of terrain can be generated with partial outside +-84latitude for SRTM3"""
@@ -126,7 +140,7 @@ def test_simplegenoutside(client):
     rv = client.post('/generate', data=dict(
         lat='-83.363261',
         long='149.165230',
-        radius='200',
+        radius='100',
         version="3"
     ), follow_redirects=True)
 
@@ -142,6 +156,29 @@ def test_simplegenoutside(client):
     rdown = client.get('/userRequestTerrain/' + uuidkey + ".zip", follow_redirects=True)
     assert b'404 Not Found' not in rdown.data
     assert len(rdown.data) > (0.25*1024*1024)
+
+    # check file has the appropriate data files inside it
+    file_like_object = io.BytesIO(rdown.data)
+    with zipfile.ZipFile(file_like_object) as zip_file:
+        file_list = zip_file.namelist()
+        assert len(file_list) == 33
+        assert set(file_list) == set(['S84E141.DAT', 'S83E141.DAT',
+                                      'S84E142.DAT', 'S83E142.DAT',
+                                      'S84E143.DAT', 'S83E143.DAT',
+                                      'S84E144.DAT', 'S83E144.DAT',
+                                      'S84E145.DAT', 'S83E145.DAT',
+                                      'S84E146.DAT', 'S83E146.DAT',
+                                      'S84E147.DAT', 'S83E147.DAT',
+                                      'S84E148.DAT', 'S83E148.DAT',
+                                      'S84E149.DAT', 'S83E149.DAT',
+                                      'S84E150.DAT', 'S83E150.DAT',
+                                      'S84E151.DAT', 'S83E151.DAT',
+                                      'S84E152.DAT', 'S83E152.DAT',
+                                      'S84E153.DAT', 'S83E153.DAT',
+                                      'S84E154.DAT', 'S83E154.DAT',
+                                      'S84E155.DAT', 'S83E155.DAT',
+                                      'S84E156.DAT', 'S83E156.DAT',
+                                      'S84E157.DAT'])
 
 def test_multigen(client):
     """Test that a a few small piece of terrains can be generated"""

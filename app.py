@@ -6,6 +6,7 @@ import urllib.request
 import gzip
 from io import BytesIO
 import time
+import math
 
 from flask import Flask
 from flask import render_template
@@ -160,8 +161,8 @@ def generate():
         for dx in range(-radius, radius):
             for dy in range(-radius, radius):
                 (lat2, lon2) = add_offset(lat*1e7, lon*1e7, dx*1000.0, dy*1000.0, format)
-                lat_int = int(round(lat2 * 1.0e-7))
-                lon_int = int(round(lon2 * 1.0e-7))
+                lat_int = int(math.floor(lat2 * 1.0e-7))
+                lon_int = int(math.floor(lon2 * 1.0e-7))
                 tag = (lat_int, lon_int)
                 if tag in done:
                     continue
