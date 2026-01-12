@@ -9,7 +9,7 @@ import fastcrc
 
 crc16 = fastcrc.crc16.xmodem
 
-from MAVProxy.modules.mavproxy_map import srtm
+import srtm
 
 # MAVLink sends 4x4 grids
 TERRAIN_GRID_MAVLINK_SIZE = 4
@@ -313,7 +313,7 @@ def create_degree(downloader, lat, lon, folder, grid_spacing, format):
                         print("downloaded %d,%d" % (lat2_int, lon2_int))
                     print("Creating for %d %d with spacing %u" % (lat_int, lon_int, grid_spacing))
                     tiles[tile_idx] = tile
-                if isinstance(tile, srtm.SRTMOceanTile):
+                if isinstance(tiles[tile_idx], srtm.SRTMOceanTile):
                     # if it's a blank ocean tile, there's a quicker way to generate the tile
                     grid.fill(gx, gy, 0)
                 else:
