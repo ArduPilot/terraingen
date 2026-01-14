@@ -300,8 +300,8 @@ def create_degree(downloader, lat, lon, folder, grid_spacing, format):
                 while not tile_idx in tiles:
                     tile = downloader.getTile(lat2_int, lon2_int)
                     waited = False
-                    if (tile == 0 and downloader.offline == 1) or (isinstance(tile, srtm.SRTMOceanTile) and downloader.offline == 1):
-                        #skip tile
+                    if tile == 0 and downloader.offline == 1:
+                        # In offline mode, can't wait for download - skip this tile
                         dfile.remove()
                         return False
                     elif tile == 0:
