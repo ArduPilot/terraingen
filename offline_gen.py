@@ -294,37 +294,47 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
             print("Skipping existing compressed tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
             return
 
-    if not os.path.exists(dat_file):
-        if not create_degree(downloader, lat, long, targetFolder, spacing, format):
-            #print("Skipping not downloaded tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
-            # Restore backup if regeneration failed
-            if backup_file and os.path.exists(backup_file):
+    try:
+        if not os.path.exists(dat_file):
+            if not create_degree(downloader, lat, long, targetFolder, spacing, format):
+                #print("Skipping not downloaded tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
+                # Restore backup if regeneration failed
+                if backup_file and os.path.exists(backup_file):
+                    os.rename(backup_file, gz_file)
+                    print("Regeneration failed, restored backup: {0}".format(os.path.basename(gz_file)))
+                time.sleep(0.2)
+                return
+            print("Created tile {0} of {1}".format(startedTiles, totTiles))
+        else:
+            print("Skipping existing tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
+
+        # Check if new file is identical to backup before compressing
+        if backup_file and os.path.exists(backup_file):
+            if files_are_identical(dat_file, backup_file):
+                print("Identical tile {0} of {1}: {2}".format(
+                    startedTiles+1, totTiles, os.path.basename(gz_file)))
+                os.remove(dat_file)
                 os.rename(backup_file, gz_file)
-                print("Regeneration failed, restored backup: {0}".format(os.path.basename(gz_file)))
-            time.sleep(0.2)
-            return
-        print("Created tile {0} of {1}".format(startedTiles, totTiles))
-    else:
-        print("Skipping existing tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
+                return
 
-    # Check if new file is identical to backup before compressing
-    if backup_file and os.path.exists(backup_file):
-        if files_are_identical(dat_file, backup_file):
-            print("Identical tile {0} of {1}: {2}".format(
-                startedTiles+1, totTiles, os.path.basename(gz_file)))
-            os.remove(dat_file)
-            os.rename(backup_file, gz_file)
-            return
+        # and compress
+        with open(dat_file, 'rb') as f_in:
+            with gzip.open(gz_file, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        os.remove(dat_file)
 
-    # and compress
-    with open(dat_file, 'rb') as f_in:
-        with gzip.open(gz_file, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-    os.remove(dat_file)
-
-    # Remove backup after successful regeneration
-    if backup_file and os.path.exists(backup_file):
-        os.remove(backup_file)
+        # Remove backup after successful regeneration
+        if backup_file and os.path.exists(backup_file):
+            os.remove(backup_file)
+    except Exception as e:
+        # Always restore backup on any error
+        if backup_file and os.path.exists(backup_file):
+            if not os.path.exists(gz_file):
+                os.rename(backup_file, gz_file)
+                print("Exception occurred, restored backup: {0} ({1})".format(os.path.basename(gz_file), e))
+            else:
+                os.remove(backup_file)
+        raise
 
     # Log comparison for --regen-ocean mode
     if regen_ocean and old_heights is not None:
