@@ -233,6 +233,21 @@ def log_regen(message):
         regen_log_file.write(message + "\n")
         regen_log_file.flush()
 
+def files_are_identical(dat_file, gz_backup_file):
+    """Compare a .DAT file with a .gz backup file.
+
+    Returns True if the contents are identical, False otherwise.
+    """
+    try:
+        with open(dat_file, 'rb') as f:
+            new_data = f.read()
+        with gzip.open(gz_backup_file, 'rb') as f:
+            old_data = f.read()
+        return new_data == old_data
+    except Exception as e:
+        print(f"Error comparing files: {e}")
+        return False
+
 def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, spacing, regen_ocean=False, regen_list=False):
     gz_file = datafile(lat, long, targetFolder) + '.gz'
     dat_file = datafile(lat, long, targetFolder)
@@ -291,6 +306,15 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
         print("Created tile {0} of {1}".format(startedTiles, totTiles))
     else:
         print("Skipping existing tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
+
+    # Check if new file is identical to backup before compressing
+    if backup_file and os.path.exists(backup_file):
+        if files_are_identical(dat_file, backup_file):
+            print("Identical tile {0} of {1}: {2}".format(
+                startedTiles+1, totTiles, os.path.basename(gz_file)))
+            os.remove(dat_file)
+            os.rename(backup_file, gz_file)
+            return
 
     # and compress
     with open(dat_file, 'rb') as f_in:
