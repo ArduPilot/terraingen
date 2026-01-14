@@ -302,6 +302,8 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
         if files_are_identical(dat_file, gz_file):
             print("Identical tile {0} of {1}: {2}".format(
                 startedTiles+1, totTiles, os.path.basename(gz_file)))
+            if regen_ocean:
+                log_regen(f"{os.path.basename(gz_file)}: identical")
             os.remove(dat_file)
             return
 
