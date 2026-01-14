@@ -395,6 +395,19 @@ def load_regen_list(filepath):
                 print(f"Warning: Could not parse tile name: {line}")
     return tiles
 
+def scan_existing_tiles(folder):
+    """Scan folder for existing .DAT.gz files and return list of (lat, lon) tuples."""
+    tiles = []
+    for filename in os.listdir(folder):
+        if not filename.endswith('.DAT.gz'):
+            continue
+        # Remove .DAT.gz extension to get tile name
+        tile_name = filename[:-7]
+        result = parse_tile_name(tile_name)
+        if result:
+            tiles.append(result)
+    return sorted(tiles)
+
 def get_size(start_path = '.'):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
@@ -481,14 +494,25 @@ if __name__ == '__main__':
     # make tileID's
     tileID = []
     i = 0
-    for long in range(-180, 180):
-        for lat in range (-(args.latitude+1), args.latitude+1):
-            # If using --regen-list, only include tiles in the list
-            if regen_list_tiles is not None:
-                if (lat, long) not in regen_list_tiles:
-                    continue
+
+    # For --regen-ocean, scan existing files instead of generating grid
+    if args.regen_ocean:
+        existing_tiles = scan_existing_tiles(targetFolder)
+        print(f"Scanning {len(existing_tiles)} existing tiles for ocean bug")
+        for lat, long in existing_tiles:
             tileID.append([lat, long, i])
             i += 1
+    elif regen_list_tiles is not None:
+        # Use tiles from regen list
+        for lat, long in sorted(regen_list_tiles):
+            tileID.append([lat, long, i])
+            i += 1
+    else:
+        # Normal mode: generate grid
+        for long in range(-180, 180):
+            for lat in range(-(args.latitude+1), args.latitude+1):
+                tileID.append([lat, long, i])
+                i += 1
 
     # total number of tiles
     totTiles = len(tileID)
