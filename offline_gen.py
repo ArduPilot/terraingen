@@ -237,6 +237,7 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
     gz_file = datafile(lat, long, targetFolder) + '.gz'
     dat_file = datafile(lat, long, targetFolder)
     old_heights = None
+    backup_file = None
 
     # Check if we need to regenerate due to ocean tile bug
     if regen_ocean:
@@ -244,9 +245,11 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
             if is_tile_affected(gz_file):
                 print("Regenerating ocean-bug-affected tile {0} of {1}: {2}".format(
                     startedTiles+1, totTiles, os.path.basename(gz_file)))
-                # Read old heights before removing for comparison
+                # Read old heights for comparison (don't delete yet!)
                 old_heights = read_tile_heights(gz_file)
-                os.remove(gz_file)
+                # Rename to backup - only delete after successful regeneration
+                backup_file = gz_file + '.bak'
+                os.rename(gz_file, backup_file)
             else:
                 # Tile is not affected, skip it
                 return
@@ -262,6 +265,10 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
     if not os.path.exists(dat_file):
         if not create_degree(downloader, lat, long, targetFolder, spacing, format):
             #print("Skipping not downloaded tile {0} of {1} ({2:.3f}%)".format(startedTiles+1, totTiles, ((startedTiles)/totTiles)*100))
+            # Restore backup if regeneration failed
+            if backup_file and os.path.exists(backup_file):
+                os.rename(backup_file, gz_file)
+                print("Regeneration failed, restored backup: {0}".format(os.path.basename(gz_file)))
             time.sleep(0.2)
             return
         print("Created tile {0} of {1}".format(startedTiles, totTiles))
@@ -273,6 +280,10 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
         with gzip.open(gz_file, 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(dat_file)
+
+    # Remove backup after successful regeneration
+    if backup_file and os.path.exists(backup_file):
+        os.remove(backup_file)
 
     # Log comparison for --regen-ocean mode
     if regen_ocean and old_heights is not None:
