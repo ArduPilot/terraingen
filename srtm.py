@@ -184,6 +184,9 @@ class SRTMDownloader():
             data = self.getURIWithRedirect(self.directory)
         except Exception:
             return
+        # Ensure data is a string for HTMLParser
+        if isinstance(data, bytes):
+            data = data.decode('utf-8')
         parser = parseHTMLDirectoryListing()
         parser.feed(data)
         continents = parser.getDirListing()
@@ -214,6 +217,9 @@ class SRTMDownloader():
                 except Exception as ex:
                     print("Failed to download %s : %s" % (url, ex))
                     continue
+                # Ensure data is a string for HTMLParser
+                if isinstance(data, bytes):
+                    data = data.decode('utf-8')
                 parser = parseHTMLDirectoryListing()
                 parser.feed(data)
                 files = parser.getDirListing()
@@ -268,7 +274,8 @@ class SRTMDownloader():
                 print("still getting file list")
             return 0
         elif not os.path.isfile(self.filelist_file) and filelistDownloadActive == 0:
-            self.createFileList()
+            if self.offline == 0:
+                self.createFileList()
             return 0
         elif not self.filelist:
             if self.debug:
