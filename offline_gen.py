@@ -233,7 +233,7 @@ def log_regen(message):
         regen_log_file.write(message + "\n")
         regen_log_file.flush()
 
-def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, spacing, regen_ocean=False):
+def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, spacing, regen_ocean=False, regen_list=False):
     gz_file = datafile(lat, long, targetFolder) + '.gz'
     dat_file = datafile(lat, long, targetFolder)
     old_heights = None
@@ -256,6 +256,23 @@ def worker(downloader, lat, long, targetFolder, startedTiles, totTiles, format, 
         elif not os.path.exists(dat_file):
             # No file exists, nothing to regenerate
             return
+    elif regen_list:
+        # Regenerate from list: don't check if affected, just regenerate
+        if os.path.exists(gz_file):
+            print("Regenerating from list tile {0} of {1}: {2}".format(
+                startedTiles+1, totTiles, os.path.basename(gz_file)))
+            # Rename to backup - only delete after successful regeneration
+            backup_file = gz_file + '.bak'
+            os.rename(gz_file, backup_file)
+        elif os.path.exists(dat_file):
+            print("Regenerating from list tile {0} of {1}: {2}".format(
+                startedTiles+1, totTiles, os.path.basename(dat_file)))
+            # Remove uncompressed file to force regeneration
+            os.remove(dat_file)
+        else:
+            # No existing file, just generate fresh
+            print("Generating missing tile {0} of {1}: {2}".format(
+                startedTiles+1, totTiles, os.path.basename(gz_file)))
     else:
         # Normal mode: skip existing compressed tiles
         if os.path.exists(gz_file):
@@ -322,6 +339,50 @@ def datafile(lat, lon, folder):
 
     return name
 
+def parse_tile_name(name):
+    """Parse a tile name like 'N00E006' or 'S45W067' to (lat, lon) tuple.
+
+    Returns (lat, lon) or None if invalid format.
+    """
+    name = name.strip()
+    if len(name) < 7:
+        return None
+
+    try:
+        ns = name[0].upper()
+        lat = int(name[1:3])
+        ew = name[3].upper()
+        lon = int(name[4:7])
+
+        if ns == 'S':
+            lat = -lat
+        elif ns != 'N':
+            return None
+
+        if ew == 'W':
+            lon = -lon
+        elif ew != 'E':
+            return None
+
+        return (lat, lon)
+    except (ValueError, IndexError):
+        return None
+
+def load_regen_list(filepath):
+    """Load list of tile names from file and return as set of (lat, lon) tuples."""
+    tiles = set()
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            result = parse_tile_name(line)
+            if result:
+                tiles.add(result)
+            else:
+                print(f"Warning: Could not parse tile name: {line}")
+    return tiles
+
 def get_size(start_path = '.'):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
@@ -363,6 +424,9 @@ if __name__ == '__main__':
     # Regenerate tiles affected by ocean tile bug
     parser.add_argument('--regen-ocean', action="store_true", dest="regen_ocean",
                         help="Only regenerate tiles affected by the ocean tile bug (coastal tiles with incorrect zero heights)")
+    # Regenerate specific tiles from a list file
+    parser.add_argument('--regen-list', action="store", dest="regen_list",
+                        help="File containing list of tile names to regenerate (e.g., N00E006, one per line)")
     args = parser.parse_args()
 
     targetFolder = os.path.join(os.getcwd(), args.folder)
@@ -395,13 +459,23 @@ if __name__ == '__main__':
 
     downloader = srtm.SRTMDownloader(debug=False, offline=(1 if args.offline else 0), directory=args.database, cachedir=args.cachedir)
     downloader.loadFileList()
-    
+
+    # Load regen list if provided
+    regen_list_tiles = None
+    if args.regen_list:
+        regen_list_tiles = load_regen_list(args.regen_list)
+        print(f"Loaded {len(regen_list_tiles)} tiles from {args.regen_list}")
+
     # make tileID's
     tileID = []
     i = 0
     for long in range(-180, 180):
         for lat in range (-(args.latitude+1), args.latitude+1):
-            tileID.append([lat, long, i]) 
+            # If using --regen-list, only include tiles in the list
+            if regen_list_tiles is not None:
+                if (lat, long) not in regen_list_tiles:
+                    continue
+            tileID.append([lat, long, i])
             i += 1
 
     # total number of tiles
@@ -410,7 +484,7 @@ if __name__ == '__main__':
 
     # Use a pool of workers to process
     with ThreadPool(args.processes-1) as p:
-        reslist = [p.apply_async(worker, args=(downloader, td[0], td[1], targetFolder, td[2], len(tileID), args.format, spacing, args.regen_ocean), error_callback=error_handler) for td in tileID]
+        reslist = [p.apply_async(worker, args=(downloader, td[0], td[1], targetFolder, td[2], len(tileID), args.format, spacing, args.regen_ocean, args.regen_list is not None), error_callback=error_handler) for td in tileID]
         for result in reslist:
             result.get()
 
