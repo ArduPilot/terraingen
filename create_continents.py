@@ -13,8 +13,9 @@ from argparse import ArgumentParser
 def compressFiles(fileList, continent, outfolder):
     # create a zip file comprised of dat.gz tiles
     zipthis = os.path.join(outfolder, continent + ".zip")
-        
-    with zipfile.ZipFile(zipthis, 'w') as terrain_zip:
+    tmp_zipthis = zipthis + ".tmp"
+
+    with zipfile.ZipFile(tmp_zipthis, 'w') as terrain_zip:
         for fn in fileList:
             if not os.path.exists(fn):
                 #download if required
@@ -34,6 +35,8 @@ def compressFiles(fileList, continent, outfolder):
                 terrain_zip.writestr(os.path.basename(fn)[:-3], myio.read(),
                                      compress_type=zipfile.ZIP_DEFLATED)
 
+    # Atomic rename to final location
+    os.rename(tmp_zipthis, zipthis)
     return True
 
 if __name__ == '__main__':
@@ -68,8 +71,6 @@ if __name__ == '__main__':
 
     # Add the files
     for continent in continents:
-        if os.path.exists(os.path.join(args.outfolder, continent + ".zip")):
-            os.remove(os.path.join(args.outfolder, continent + ".zip"))
         print("Processing: " + continent)
         files = continents[continent]
         compressFiles(files, continent, args.outfolder)
