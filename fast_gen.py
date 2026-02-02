@@ -89,15 +89,12 @@ def load_hgt_zip(filepath):
     return arr
 
 
-def build_combined_array(lat_int, lon_int, hgt_map, hgt_cache):
-    """Build a combined elevation array covering the main tile and neighbours.
+def load_tile_dict(lat_int, lon_int, hgt_map, hgt_cache):
+    """Load the main tile and its neighbours into a dict.
 
-    Returns (combined_array, min_lat, min_lon, hgt_size).
-    The combined array covers a 2x2 degree area (or less if neighbours missing).
-    Row 0 = south, col 0 = west.
+    Returns (tile_dict, hgt_size) where tile_dict maps (lat, lon) to a
+    numpy array (row 0 = south), or None for missing/ocean tiles.
     """
-    # We need the main tile plus potentially tiles to the north and east
-    # (for edge blocks that interpolate across the degree boundary)
     needed = [
         (lat_int, lon_int),
         (lat_int, lon_int + 1),
@@ -105,7 +102,6 @@ def build_combined_array(lat_int, lon_int, hgt_map, hgt_cache):
         (lat_int + 1, lon_int + 1),
     ]
 
-    # Load needed tiles
     hgt_size = None
     for (lat, lon) in needed:
         if (lat, lon) in hgt_cache:
@@ -124,25 +120,9 @@ def build_combined_array(lat_int, lon_int, hgt_map, hgt_cache):
             hgt_cache[(lat, lon)] = None
 
     if hgt_size is None:
-        # No tiles at all - pure ocean
-        hgt_size = 3601  # default to SRTM1 size
-        # Return zeros
-        combined = np.zeros((2 * (hgt_size - 1) + 1, 2 * (hgt_size - 1) + 1), dtype=np.int16)
-        return combined, lat_int, lon_int, hgt_size
+        hgt_size = 3601
 
-    # Build combined array for 2x2 degree area
-    n = hgt_size - 1  # pixels per degree
-    combined = np.zeros((2 * n + 1, 2 * n + 1), dtype=np.int16)
-
-    for (lat, lon) in needed:
-        tile = hgt_cache.get((lat, lon))
-        if tile is None:
-            continue
-        row_offset = (lat - lat_int) * n
-        col_offset = (lon - lon_int) * n
-        combined[row_offset:row_offset + hgt_size, col_offset:col_offset + hgt_size] = tile
-
-    return combined, lat_int, lon_int, hgt_size
+    return hgt_cache, hgt_size
 
 
 def enumerate_valid_blocks(lat_int, lon_int, spacing, fmt):
@@ -257,52 +237,65 @@ def compute_grid_points_vectorised(valid_blocks, spacing, fmt):
     return point_lat_e7, point_lon_e7
 
 
-def interpolate_heights(point_lat_e7, point_lon_e7, combined, min_lat, min_lon, hgt_size):
-    """Bilinear interpolation of heights from the combined HGT array.
+def interpolate_heights(point_lat_e7, point_lon_e7, tile_dict, hgt_size):
+    """Bilinear interpolation of heights using per-tile lookup.
+
+    The original create_degree() selects a single SRTM tile per grid point
+    using floor(lat) and floor(lon), then interpolates within that tile.
+    SRTM tiles overlap by one pixel at boundaries and the overlap values
+    can disagree, so we must replicate this per-tile selection exactly.
 
     point_lat_e7, point_lon_e7: shape (n_blocks, 28, 32), int64
-    combined: the combined elevation array, row 0 = south at min_lat
+    tile_dict: {(lat_int, lon_int): numpy_array or None}
     Returns heights array shape (n_blocks, 28, 32), int16.
     """
     n = hgt_size - 1  # pixels per degree
+    shape = point_lat_e7.shape
+    heights = np.zeros(shape, dtype=np.int16)
 
-    # Convert to float pixel coordinates in the combined array
-    cy = (point_lat_e7.astype(np.float64) * 1e-7 - min_lat) * n
-    cx = (point_lon_e7.astype(np.float64) * 1e-7 - min_lon) * n
+    lat_deg = point_lat_e7.astype(np.float64) * 1e-7
+    lon_deg = point_lon_e7.astype(np.float64) * 1e-7
 
-    cy_int = np.floor(cy).astype(np.int32)
-    cx_int = np.floor(cx).astype(np.int32)
-    cy_frac = cy - cy_int
-    cx_frac = cx - cx_int
+    # Determine which tile each point belongs to
+    tile_lat = np.floor(lat_deg).astype(np.int32)
+    tile_lon = np.floor(lon_deg).astype(np.int32)
 
-    # Clamp to valid range
-    max_row = combined.shape[0] - 2
-    max_col = combined.shape[1] - 2
-    cy_int = np.clip(cy_int, 0, max_row)
-    cx_int = np.clip(cx_int, 0, max_col)
+    # Process each unique tile
+    unique_tiles = set(zip(tile_lat.ravel(), tile_lon.ravel()))
+    for (tlat, tlon) in unique_tiles:
+        tile = tile_dict.get((tlat, tlon))
+        if tile is None:
+            continue  # ocean / missing — heights stay 0
 
-    # Flatten for advanced indexing
-    flat_cy = cy_int.ravel()
-    flat_cx = cx_int.ravel()
-    shape = cy_int.shape
+        mask = (tile_lat == tlat) & (tile_lon == tlon)
+        if not np.any(mask):
+            continue
 
-    v00 = combined[flat_cy, flat_cx].reshape(shape).astype(np.float64)
-    v10 = combined[flat_cy, flat_cx + 1].reshape(shape).astype(np.float64)
-    v01 = combined[flat_cy + 1, flat_cx].reshape(shape).astype(np.float64)
-    v11 = combined[flat_cy + 1, flat_cx + 1].reshape(shape).astype(np.float64)
+        # Pixel coordinates within this tile
+        cy = (lat_deg[mask] - tlat) * n
+        cx = (lon_deg[mask] - tlon) * n
 
-    # Handle void values: the original code treats -1 (from getPixelValue) as None
-    # and uses _avg which skips None values. Since we replaced -32768 with 0 on load,
-    # this matches the original behaviour (void -> 0 altitude).
+        cy_int = np.floor(cy).astype(np.int32)
+        cx_int = np.floor(cx).astype(np.int32)
+        cy_frac = cy - cy_int
+        cx_frac = cx - cx_int
 
-    # Bilinear interpolation — two-step to match original scalar code exactly.
-    # The original does: interp x first, then interp y on the results.
-    # A single 4-point formula has different rounding and can be off-by-one.
-    val_x0 = v10 * cx_frac + v00 * (1 - cx_frac)  # y_int row
-    val_x1 = v11 * cx_frac + v01 * (1 - cx_frac)  # y_int+1 row
-    heights = val_x1 * cy_frac + val_x0 * (1 - cy_frac)
+        cy_int = np.clip(cy_int, 0, n - 1)
+        cx_int = np.clip(cx_int, 0, n - 1)
 
-    return heights.astype(np.int16)
+        v00 = tile[cy_int, cx_int].astype(np.float64)
+        v10 = tile[cy_int, cx_int + 1].astype(np.float64)
+        v01 = tile[cy_int + 1, cx_int].astype(np.float64)
+        v11 = tile[cy_int + 1, cx_int + 1].astype(np.float64)
+
+        # Two-step bilinear to match original scalar rounding exactly
+        val_x0 = v10 * cx_frac + v00 * (1 - cx_frac)
+        val_x1 = v11 * cx_frac + v01 * (1 - cx_frac)
+        val = val_x1 * cy_frac + val_x0 * (1 - cy_frac)
+
+        heights[mask] = val.astype(np.int16)
+
+    return heights
 
 
 def pack_dat_file(valid_blocks, heights, lat_int, lon_int, spacing, fmt):
@@ -378,8 +371,8 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
         print(f"No valid blocks for {os.path.basename(hgt_file)}")
         return
 
-    # Step 2: Build combined elevation array
-    combined, min_lat, min_lon, hgt_size = build_combined_array(
+    # Step 2: Load elevation tiles
+    tile_dict, hgt_size = load_tile_dict(
         lat_int, lon_int, hgt_map, hgt_cache)
 
     # Step 3: Compute grid point coordinates (vectorised, in chunks to limit memory)
@@ -397,7 +390,7 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
 
         # Step 4: Interpolate heights
         chunk_heights = interpolate_heights(
-            point_lat_e7, point_lon_e7, combined, min_lat, min_lon, hgt_size)
+            point_lat_e7, point_lon_e7, tile_dict, hgt_size)
 
         all_heights[chunk_start:chunk_end] = chunk_heights
 
@@ -436,8 +429,9 @@ def main():
     args = parser.parse_args()
 
     # Scan for HGT files (flat or continent subdirs)
-    hgt_files = sorted(glob.glob(os.path.join(args.hgt_dir, '**/*.hgt.zip'),
-                                 recursive=True))
+    hgt_files = sorted(f for f in glob.glob(os.path.join(args.hgt_dir, '**/*.hgt.zip'),
+                                            recursive=True)
+                        if parse_hgt_filename(f) is not None)
     if not hgt_files:
         print(f"No .hgt.zip files found in {args.hgt_dir}")
         sys.exit(1)
