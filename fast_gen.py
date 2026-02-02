@@ -84,8 +84,8 @@ def load_hgt_zip(filepath):
     arr = np.frombuffer(data, dtype='>i2').reshape(size, size).astype(np.int16)
     # Flip so row 0 = south
     arr = arr[::-1].copy()
-    # Replace void values
-    arr[arr == -32768] = 0
+    # Replace void values with -1 to match srtm.py getPixelValue() behaviour
+    arr[arr == -32768] = -1
     return arr
 
 
@@ -349,7 +349,7 @@ def dat_filename(lat_int, lon_int):
                                      ew, min(abs(lon_int), 999))
 
 
-def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
+def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, tile_total=None):
     """Process a single HGT tile to produce a DAT.gz file."""
     coords = parse_hgt_filename(hgt_file)
     if coords is None:
@@ -359,8 +359,10 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
     lat_int, lon_int = coords
     outname = dat_filename(lat_int, lon_int)
     outpath = os.path.join(output_dir, outname)
+    progress = f"[{tile_idx}/{tile_total}] " if tile_idx is not None else ""
 
     if os.path.exists(outpath):
+        print(f"{progress}Skipping {outname} (exists)")
         return
 
     hgt_cache = {}
@@ -368,7 +370,7 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
     # Step 1: Enumerate valid blocks
     valid_blocks, stride = enumerate_valid_blocks(lat_int, lon_int, spacing, fmt)
     if not valid_blocks:
-        print(f"No valid blocks for {os.path.basename(hgt_file)}")
+        print(f"{progress}No valid blocks for {os.path.basename(hgt_file)}")
         return
 
     # Step 2: Load elevation tiles
@@ -404,7 +406,7 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt):
         f.write(file_buf)
     os.rename(tmp_path, outpath)
 
-    print(f"Generated {outname} ({n_blocks} blocks)")
+    print(f"{progress}Generated {outname} ({n_blocks} blocks)")
 
 
 def process_tile_wrapper(args):
@@ -429,40 +431,36 @@ def main():
     args = parser.parse_args()
 
     # Scan for HGT files (flat or continent subdirs)
-    hgt_files = sorted(f for f in glob.glob(os.path.join(args.hgt_dir, '**/*.hgt.zip'),
-                                            recursive=True)
-                        if parse_hgt_filename(f) is not None)
+    all_files = glob.glob(os.path.join(args.hgt_dir, '**/*.hgt.zip'), recursive=True)
+    hgt_files = []
+    for f in all_files:
+        coords = parse_hgt_filename(f)
+        if coords is not None:
+            hgt_files.append((coords, f))
+    # Sort by (lat, lon) for predictable processing order
+    hgt_files.sort(key=lambda x: x[0])
+
     if not hgt_files:
         print(f"No .hgt.zip files found in {args.hgt_dir}")
         sys.exit(1)
 
-    print(f"Found {len(hgt_files)} HGT files")
+    total = len(hgt_files)
+    print(f"Found {total} HGT files")
 
     # Build lookup dict: (lat, lon) -> filepath
-    hgt_map = {}
-    for f in hgt_files:
-        coords = parse_hgt_filename(f)
-        if coords is not None:
-            hgt_map[coords] = f
+    hgt_map = {coords: f for coords, f in hgt_files}
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Count how many already exist
-    existing = sum(1 for f in hgt_files
-                   if os.path.exists(os.path.join(args.output_dir,
-                                                  dat_filename(*parse_hgt_filename(f)))))
-    if existing > 0:
-        print(f"Skipping {existing} already-generated tiles")
-
-    work_args = [(f, hgt_map, args.output_dir, args.spacing, "4.1")
-                 for f in hgt_files]
+    work_args = [(f, hgt_map, args.output_dir, args.spacing, "4.1", i + 1, total)
+                 for i, (coords, f) in enumerate(hgt_files)]
 
     if args.processes <= 1:
         for wa in work_args:
             process_tile_wrapper(wa)
     else:
         with Pool(processes=args.processes) as pool:
-            pool.map(process_tile_wrapper, work_args)
+            pool.map(process_tile_wrapper, work_args, chunksize=1)
 
     print("Done!")
 
