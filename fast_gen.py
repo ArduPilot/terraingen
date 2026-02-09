@@ -349,7 +349,7 @@ def dat_filename(lat_int, lon_int):
                                      ew, min(abs(lon_int), 999))
 
 
-def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, tile_total=None):
+def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, tile_total=None, overwrite=False):
     """Process a single HGT tile to produce a DAT.gz file."""
     coords = parse_hgt_filename(hgt_file)
     if coords is None:
@@ -361,7 +361,7 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, til
     outpath = os.path.join(output_dir, outname)
     progress = f"[{tile_idx}/{tile_total}] " if tile_idx is not None else ""
 
-    if os.path.exists(outpath):
+    if os.path.exists(outpath) and not overwrite:
         print(f"{progress}Skipping {outname} (exists)")
         return
 
@@ -428,6 +428,8 @@ def main():
                         help='Grid spacing in metres (default: 30)')
     parser.add_argument('--processes', type=int, default=8,
                         help='Number of parallel workers (default: 8)')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Overwrite existing output files')
     args = parser.parse_args()
 
     # Scan for HGT files (flat or continent subdirs)
@@ -452,7 +454,7 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    work_args = [(f, hgt_map, args.output_dir, args.spacing, "4.1", i + 1, total)
+    work_args = [(f, hgt_map, args.output_dir, args.spacing, "4.1", i + 1, total, args.overwrite)
                  for i, (coords, f) in enumerate(hgt_files)]
 
     if args.processes <= 1:
