@@ -163,10 +163,10 @@ def blocks_to_grid(blocks):
     return height_grid
 
 
-def height_to_rgb(height_grid):
+def height_to_rgb(height_grid, grey=False):
     """Convert height grid to RGB image.
 
-    0 = black. Non-zero heights mapped blue (lowest) to red (highest).
+    0 = black. Non-zero heights mapped blue-to-red (default) or greyscale.
     """
     rgb = np.zeros((*height_grid.shape, 3), dtype=np.uint8)
 
@@ -178,17 +178,22 @@ def height_to_rgb(height_grid):
     nz_max = height_grid[nonzero].max()
 
     if nz_max == nz_min:
-        # All non-zero values the same - use mid colour
-        rgb[nonzero] = [128, 0, 128]
+        rgb[nonzero] = [128, 128, 128] if grey else [128, 0, 128]
         return rgb
 
     # Normalise non-zero heights to 0..1
     t = (height_grid[nonzero].astype(np.float32) - nz_min) / (nz_max - nz_min)
 
-    # Blue (0,0,255) at t=0 to Red (255,0,0) at t=1
-    rgb[nonzero, 0] = (t * 255).astype(np.uint8)         # R
-    rgb[nonzero, 1] = 0                                   # G
-    rgb[nonzero, 2] = ((1 - t) * 255).astype(np.uint8)   # B
+    if grey:
+        v = (t * 255).astype(np.uint8)
+        rgb[nonzero, 0] = v
+        rgb[nonzero, 1] = v
+        rgb[nonzero, 2] = v
+    else:
+        # Blue (0,0,255) at t=0 to Red (255,0,0) at t=1
+        rgb[nonzero, 0] = (t * 255).astype(np.uint8)         # R
+        rgb[nonzero, 1] = 0                                   # G
+        rgb[nonzero, 2] = ((1 - t) * 255).astype(np.uint8)   # B
 
     return rgb
 
@@ -239,13 +244,13 @@ def grid_to_latlon(grid_x, grid_y, tile_lat, tile_lon, spacing):
     return lat, lon
 
 
-def show_file(datfile, plt):
+def show_file(datfile, plt, grey=False):
     """Open a viewer window for one DAT file."""
     height_grid, tile_lat, tile_lon, spacing = load_file(datfile)
     if height_grid is None:
         return
 
-    rgb = height_to_rgb(height_grid)
+    rgb = height_to_rgb(height_grid, grey=grey)
 
     # Flip so north is up (row 0 = bottom of grid = south)
     rgb = rgb[::-1, :, :]
@@ -325,7 +330,7 @@ def resample_grid(grid, old_spacing, new_spacing):
     return grid[row_idx][:, col_idx]
 
 
-def show_diff(file1, file2, plt):
+def show_diff(file1, file2, plt, grey=False):
     """Show two files and their difference."""
     grid1, tile_lat1, tile_lon1, spacing1 = load_file(file1)
     grid2, tile_lat2, tile_lon2, spacing2 = load_file(file2)
@@ -365,8 +370,8 @@ def show_diff(file1, file2, plt):
     n_diff = np.count_nonzero(diff)
     print(f"  Diff: {n_diff} pixels differ, range {diff.min()} to {diff.max()}")
 
-    rgb1 = height_to_rgb(grid1)[::-1, :, :]
-    rgb2 = height_to_rgb(grid2)[::-1, :, :]
+    rgb1 = height_to_rgb(grid1, grey=grey)[::-1, :, :]
+    rgb2 = height_to_rgb(grid2, grey=grey)[::-1, :, :]
     rgb_diff = diff_to_rgb(diff)[::-1, :, :]
     h1 = grid1[::-1, :]
     h2 = grid2[::-1, :]
@@ -416,6 +421,8 @@ def main():
     parser.add_argument('datfiles', nargs='+', help='Path to .DAT, .DAT.gz, .hgt, or .hgt.zip files')
     parser.add_argument('--diff', action='store_true',
                         help='Show difference between exactly 2 files')
+    parser.add_argument('--grey', action='store_true',
+                        help='Show heights as greyscale instead of blue-to-red')
     args = parser.parse_args()
 
     if args.diff:
@@ -426,10 +433,10 @@ def main():
     import matplotlib.pyplot as plt
 
     if args.diff:
-        show_diff(args.datfiles[0], args.datfiles[1], plt)
+        show_diff(args.datfiles[0], args.datfiles[1], plt, grey=args.grey)
     else:
         for datfile in args.datfiles:
-            show_file(datfile, plt)
+            show_file(datfile, plt, grey=args.grey)
 
     plt.show()
 
