@@ -174,48 +174,49 @@ def enumerate_valid_blocks(lat_int, lon_int, spacing, fmt):
     return valid_blocks, stride
 
 
-def compute_grid_points_vectorised(valid_blocks, spacing, fmt):
+def compute_grid_points_vectorised(valid_blocks, lat_int, lon_int, spacing, fmt):
     """Compute lat/lon coordinates for all grid points in all blocks.
 
     Returns (point_lat_e7, point_lon_e7) each with shape (n_blocks, 28, 32).
     The grid is 28 points north (gx) by 32 points east (gy), matching
     TERRAIN_GRID_BLOCK_SIZE_X=28, TERRAIN_GRID_BLOCK_SIZE_Y=32.
 
-    The original create_degree() converts block SW corners through a float
-    round-trip (int -> *1e-7 -> *1e7) before calling add_offset. This
-    introduces tiny float64 rounding errors that we must replicate exactly
-    for bit-identical output.
+    Uses a single-step offset from the degree corner for each grid point,
+    matching what AP_Terrain does on the vehicle. This avoids the two-step
+    error (degree corner -> block corner -> grid point) where compounding
+    longitude_scale at different latitudes causes horizontal drift at high
+    latitudes.
     """
     n_blocks = len(valid_blocks)
+    ref_lat = lat_int * 10 * 1000 * 1000  # degree corner in e7
+    ref_lon = lon_int * 10 * 1000 * 1000
 
-    # Block SW corners as integers
-    sw_lat_int = np.array([b[3] for b in valid_blocks], dtype=np.int64)
-    sw_lon_int = np.array([b[4] for b in valid_blocks], dtype=np.int64)
-
-    # Apply the same float round-trip as create_degree():
-    #   lat = lat_e7 * 1.0e-7;  add_offset(lat*1.0e7, ...)
-    sw_lat_f = sw_lat_int.astype(np.float64) * 1e-7 * 1e7  # (n_blocks,)
-    sw_lon_f = sw_lon_int.astype(np.float64) * 1e-7 * 1e7  # (n_blocks,)
+    # Grid indices for each block
+    block_grid_idx_x = np.array([b[1] for b in valid_blocks], dtype=np.int64)  # (n_blocks,)
+    block_grid_idx_y = np.array([b[2] for b in valid_blocks], dtype=np.int64)  # (n_blocks,)
 
     LSCF_INV = float(LOCATION_SCALING_FACTOR_INV)
 
-    # North offsets for gx: 0..27
-    gx_range = np.arange(TERRAIN_GRID_BLOCK_SIZE_X, dtype=np.float64)  # 28
-    north_m = gx_range * spacing
+    # Global grid indices (single-step from degree corner)
+    gx_range = np.arange(TERRAIN_GRID_BLOCK_SIZE_X, dtype=np.int64)  # 0..27
+    gy_range = np.arange(TERRAIN_GRID_BLOCK_SIZE_Y, dtype=np.int64)  # 0..31
 
-    # dlat = int(float(ofs_north) * LSCF_INV) — same for all blocks, shape (28,)
+    # North: global_idx_x = grid_idx_x * SPACING_X + gx, shape (n_blocks, 28)
+    global_idx_x = block_grid_idx_x[:, None] * TERRAIN_GRID_BLOCK_SPACING_X + gx_range[None, :]
+    north_m = global_idx_x.astype(np.float64) * spacing
+
+    # dlat = int(north_m * LSCF_INV), shape (n_blocks, 28)
     dlat = np.trunc(north_m * LSCF_INV).astype(np.int64)
 
-    # Point latitudes = int(sw_lat_f + dlat), shape (n_blocks, 28)
-    point_lat_e7 = np.trunc(sw_lat_f[:, None] + dlat[None, :].astype(np.float64)).astype(np.int64)
+    # Point latitudes: single-step from degree corner
+    point_lat_e7 = ref_lat + dlat  # (n_blocks, 28)
 
-    # East offsets for gy: 0..31
-    gy_range = np.arange(TERRAIN_GRID_BLOCK_SIZE_Y, dtype=np.float64)  # 32
-    east_m = gy_range * spacing
+    # East: global_idx_y = grid_idx_y * SPACING_Y + gy, shape (n_blocks, 32)
+    global_idx_y = block_grid_idx_y[:, None] * TERRAIN_GRID_BLOCK_SPACING_Y + gy_range[None, :]
+    east_m = global_idx_y.astype(np.float64) * spacing
 
-    # 4.1 format: longitude_scale uses midpoint (lat_e7 + dlat*0.5) * 1e-7
-    # where lat_e7 is sw_lat_f (the float round-tripped value)
-    mid_lat_deg = (sw_lat_f[:, None] + dlat[None, :].astype(np.float64) * 0.5) * 1e-7
+    # 4.1 format: longitude_scale uses midpoint (ref_lat + dlat*0.5) * 1e-7
+    mid_lat_deg = (float(ref_lat) + dlat.astype(np.float64) * 0.5) * 1e-7
     # (n_blocks, 28)
 
     # Match float32 behaviour for longitude_scale
@@ -223,11 +224,11 @@ def compute_grid_points_vectorised(valid_blocks, spacing, fmt):
     lon_scale = np.cos(rad_f32.astype(np.float64)).astype(np.float32).astype(np.float64)
     lon_scale = np.maximum(lon_scale, 0.01)  # (n_blocks, 28)
 
-    # dlng = int(float(ofs_east) * LSCF_INV / lon_scale), shape (n_blocks, 28, 32)
-    dlng = np.trunc(east_m[None, None, :] * LSCF_INV / lon_scale[:, :, None]).astype(np.int64)
+    # dlng = int(east_m * LSCF_INV / lon_scale), shape (n_blocks, 28, 32)
+    dlng = np.trunc(east_m[:, None, :] * LSCF_INV / lon_scale[:, :, None]).astype(np.int64)
 
-    # Point longitudes = int(sw_lon_f + dlng), shape (n_blocks, 28, 32)
-    point_lon_e7 = np.trunc(sw_lon_f[:, None, None] + dlng.astype(np.float64)).astype(np.int64)
+    # Point longitudes: single-step from degree corner
+    point_lon_e7 = ref_lon + dlng  # (n_blocks, 28, 32)
 
     # Expand lat to (n_blocks, 28, 32)
     point_lat_e7 = np.broadcast_to(point_lat_e7[:, :, None],
@@ -388,7 +389,7 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, til
         chunk_blocks = valid_blocks[chunk_start:chunk_end]
 
         point_lat_e7, point_lon_e7 = compute_grid_points_vectorised(
-            chunk_blocks, spacing, fmt)
+            chunk_blocks, lat_int, lon_int, spacing, fmt)
 
         # Step 4: Interpolate heights
         chunk_heights = interpolate_heights(

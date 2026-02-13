@@ -293,7 +293,10 @@ def create_degree(downloader, lat, lon, folder, grid_spacing, format):
             continue
         for gx in range(TERRAIN_GRID_BLOCK_SIZE_X):
             for gy in range(TERRAIN_GRID_BLOCK_SIZE_Y):
-                lat_e7, lon_e7 = add_offset(lat*1.0e7, lon*1.0e7, gx*grid_spacing, gy*grid_spacing, format)
+                lat_e7, lon_e7 = add_offset(lat_int*1e7, lon_int*1e7,
+                                            (grid.grid_idx_x * TERRAIN_GRID_BLOCK_SPACING_X + gx) * grid_spacing,
+                                            (grid.grid_idx_y * TERRAIN_GRID_BLOCK_SPACING_Y + gy) * grid_spacing,
+                                            format)
                 lat2_int = int(math.floor(lat_e7*1.0e-7))
                 lon2_int = int(math.floor(lon_e7*1.0e-7))
                 tile_idx = (lat2_int, lon2_int)
