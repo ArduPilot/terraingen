@@ -46,10 +46,12 @@ if __name__ == '__main__':
 
     parser.add_argument("infolder", type=str, default="./files")
     parser.add_argument("outfolder", type=str, default="./continents")
+    parser.add_argument("--cachedir", type=str, default=None,
+                        help="Directory containing filelist_python for continent mapping")
 
     args = parser.parse_args()
 
-    downloader = srtm.SRTMDownloader(debug=False)
+    downloader = srtm.SRTMDownloader(debug=False, cachedir=args.cachedir)
     downloader.loadFileList()
 
     continents = {}
