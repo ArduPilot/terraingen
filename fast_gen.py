@@ -402,9 +402,11 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, til
 
     # Step 6: Compress and write atomically
     os.makedirs(output_dir, exist_ok=True)
+    dat_name = outname[:-3]  # .DAT name for gzip header
     tmp_path = outpath + '.tmp'
-    with gzip.open(tmp_path, 'wb') as f:
-        f.write(file_buf)
+    with open(tmp_path, 'wb') as raw_f:
+        with gzip.GzipFile(dat_name, 'wb', fileobj=raw_f) as f:
+            f.write(file_buf)
     os.rename(tmp_path, outpath)
 
     print(f"{progress}Generated {outname} ({n_blocks} blocks)")
