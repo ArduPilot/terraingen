@@ -350,6 +350,16 @@ def dat_filename(lat_int, lon_int):
                                      ew, min(abs(lon_int), 999))
 
 
+def write_dat_gz(outpath, outname, file_buf):
+    """Compress and write a DAT file atomically."""
+    dat_name = outname[:-3]  # .DAT name for gzip header
+    tmp_path = outpath + '.tmp'
+    with open(tmp_path, 'wb') as raw_f:
+        with gzip.GzipFile(dat_name, 'wb', fileobj=raw_f) as f:
+            f.write(file_buf)
+    os.rename(tmp_path, outpath)
+
+
 def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, tile_total=None, overwrite=False):
     """Process a single HGT tile to produce a DAT.gz file."""
     coords = parse_hgt_filename(hgt_file)
@@ -402,14 +412,38 @@ def process_tile(hgt_file, hgt_map, output_dir, spacing, fmt, tile_idx=None, til
 
     # Step 6: Compress and write atomically
     os.makedirs(output_dir, exist_ok=True)
-    dat_name = outname[:-3]  # .DAT name for gzip header
-    tmp_path = outpath + '.tmp'
-    with open(tmp_path, 'wb') as raw_f:
-        with gzip.GzipFile(dat_name, 'wb', fileobj=raw_f) as f:
-            f.write(file_buf)
-    os.rename(tmp_path, outpath)
+    write_dat_gz(outpath, outname, file_buf)
 
     print(f"{progress}Generated {outname} ({n_blocks} blocks)")
+
+
+def process_ocean_tile(args):
+    """Generate an all-zero DAT.gz file for an ocean tile."""
+    try:
+        lat_int, lon_int, output_dir, spacing, fmt, tile_idx, tile_total, overwrite = args
+        outname = dat_filename(lat_int, lon_int)
+        outpath = os.path.join(output_dir, outname)
+        progress = f"[{tile_idx}/{tile_total}] " if tile_idx is not None else ""
+
+        if os.path.exists(outpath) and not overwrite:
+            return
+
+        valid_blocks, stride = enumerate_valid_blocks(lat_int, lon_int, spacing, fmt)
+        if not valid_blocks:
+            return
+
+        n_blocks = len(valid_blocks)
+        all_heights = np.zeros((n_blocks, TERRAIN_GRID_BLOCK_SIZE_X,
+                                TERRAIN_GRID_BLOCK_SIZE_Y), dtype=np.int16)
+
+        file_buf = pack_dat_file(valid_blocks, all_heights, lat_int, lon_int, spacing, fmt)
+        write_dat_gz(outpath, outname, file_buf)
+
+        print(f"{progress}Ocean {outname} ({n_blocks} blocks)")
+    except Exception as e:
+        print(f"Error generating ocean tile ({lat_int},{lon_int}): {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def process_tile_wrapper(args):
@@ -433,6 +467,9 @@ def main():
                         help='Number of parallel workers (default: 8)')
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite existing output files')
+    parser.add_argument('--lat-range', type=int, nargs=2, metavar=('MIN', 'MAX'),
+                        help='Generate ocean tiles for all longitudes in this latitude range '
+                             '(e.g. --lat-range -85 84 for full world coverage)')
     args = parser.parse_args()
 
     # Scan for HGT files (flat or continent subdirs)
@@ -457,6 +494,7 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Process land tiles from HGT data
     work_args = [(f, hgt_map, args.output_dir, args.spacing, "4.1", i + 1, total, args.overwrite)
                  for i, (coords, f) in enumerate(hgt_files)]
 
@@ -466,6 +504,32 @@ def main():
     else:
         with Pool(processes=args.processes) as pool:
             pool.map(process_tile_wrapper, work_args, chunksize=1)
+
+    # Generate ocean tiles for lat/lon combinations not covered by HGT files
+    if args.lat_range is not None:
+        lat_min, lat_max = args.lat_range
+        ocean_work = []
+        idx = 0
+        for lat in range(lat_min, lat_max + 1):
+            for lon in range(-180, 180):
+                if (lat, lon) not in hgt_map:
+                    idx += 1
+                    ocean_work.append((lat, lon, args.output_dir, args.spacing,
+                                       "4.1", idx, None, args.overwrite))
+
+        # Fill in total count
+        ocean_total = len(ocean_work)
+        ocean_work = [(lat, lon, out, sp, fmt, i, ocean_total, ow)
+                      for lat, lon, out, sp, fmt, i, _, ow in ocean_work]
+
+        print(f"Generating {ocean_total} ocean tiles...")
+
+        if args.processes <= 1:
+            for wa in ocean_work:
+                process_ocean_tile(wa)
+        else:
+            with Pool(processes=args.processes) as pool:
+                pool.map(process_ocean_tile, ocean_work, chunksize=4)
 
     print("Done!")
 
