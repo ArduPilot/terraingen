@@ -59,5 +59,9 @@ A systemd service is provided for running the WSGI server.
 
 - **terrain_view.py** - 2D terrain visualiser. Displays DAT or HGT files as colour-mapped images with mouse-over lat/lon and height readout. Supports `--diff` mode to compare two files.
 
+- **terrain_gen.py** - (Deprecated, use fast_gen.py) Original terrain DAT file generator. Used by offline_gen.py and app.py for core data structures and coordinate calculations.
+
+- **version_minor.py** - Reads or sets the `version_minor` field in terrain `.DAT.gz` files. Used to mark regenerated tiles so ArduPilot can detect outdated terrain data.
+
 - **offline_check.py** - Validates terrain DAT files for corruption by checking CRC, block structure, and coverage.
 
