@@ -237,7 +237,8 @@ class DataFile(object):
         for gx in range(TERRAIN_GRID_BLOCK_SIZE_X):
             buf += struct.pack("<%uh" % TERRAIN_GRID_BLOCK_SIZE_Y, *block.height[gx])
         buf += struct.pack("<HHhb", block.grid_idx_x, block.grid_idx_y, block.lon_degrees, block.lat_degrees)
-        buf += struct.pack("%uB" % IO_BLOCK_TRAILER_SIZE, *[0]*IO_BLOCK_TRAILER_SIZE)
+        buf += struct.pack("B", 1)  # version_minor at offset 1821
+        buf += struct.pack("%uB" % (IO_BLOCK_TRAILER_SIZE - 1), *[0]*(IO_BLOCK_TRAILER_SIZE - 1))
         return buf
 
     def write(self, block):
