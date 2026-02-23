@@ -326,10 +326,10 @@ def pack_dat_file(valid_blocks, heights, lat_int, lon_int, spacing, fmt):
         trailer = struct.pack('<HHhb', grid_idx_x, grid_idx_y, lon_int, lat_int)
 
         # Assemble block: header(22) + heights(1792) + trailer(7) = 1821 data bytes
-        # Plus padding to fill IO_BLOCK_SIZE
+        # Plus version_minor and padding to fill IO_BLOCK_SIZE
         block = header + h_bytes + trailer
-        padding_size = IO_BLOCK_SIZE - len(block)
-        block = block + b'\x00' * padding_size
+        block += struct.pack('B', 1)  # version_minor at offset 1821
+        block += b'\x00' * (IO_BLOCK_SIZE - len(block))
 
         # Compute CRC over first 1821 bytes (with crc field = 0)
         crc = fastcrc.crc16.xmodem(block[:IO_BLOCK_DATA_SIZE])
