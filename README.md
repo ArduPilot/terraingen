@@ -41,3 +41,23 @@ To run the unit tests, type ``pytest``
 
 A systemd service is provided for running the WSGI server.
 
+## Tools
+
+- **fast_gen.py** - Fast terrain DAT file generator using numpy. Generates `.DAT.gz` files from SRTM HGT data with multiprocessing. Supports both land and ocean tiles, and both SRTM1 (30m) and SRTM3 (100m) spacing. Use `--lat-range` to generate ocean tiles for a latitude range.
+
+- **create_filelist.py** - Creates the `filelist_python` pickle file for an HGT directory. This file is used by `srtm.py` to look up available tiles without scanning the directory each time.
+
+- **create_continents.py** - Packages terrain DAT files into per-continent ZIP archives for distribution, using the filelist_python continent mapping from `srtm.py`.
+
+- **resample_hgt.py** - Downsamples SRTM1 HGT files (3601x3601) to SRTM3 (1201x1201) by taking every 3rd pixel. Takes input and output directory names.
+
+- **srtm1_to_srtm3.py** - Resamples SRTM1 HGT data to SRTM3 resolution using mean pooling via scipy interpolation.
+
+- **find_steep.py** - Scans HGT or DAT files for neighbouring points exceeding a height difference threshold. Reports count, max difference, and lat/lon of the steepest point. Useful for finding data anomalies.
+
+- **slice_graph.py** - Altitude profile visualiser. Plots a horizontal slice through terrain tiles comparing DAT and HGT data side by side, replicating both AP_Terrain and srtm.py interpolation methods.
+
+- **terrain_view.py** - 2D terrain visualiser. Displays DAT or HGT files as colour-mapped images with mouse-over lat/lon and height readout. Supports `--diff` mode to compare two files.
+
+- **offline_check.py** - Validates terrain DAT files for corruption by checking CRC, block structure, and coverage.
+
