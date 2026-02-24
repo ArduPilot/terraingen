@@ -48,8 +48,12 @@ def write_data(filepath, data):
     """Write file contents, compressing if the original was compressed."""
     tmp = filepath + '.tmp'
     if is_compressed(filepath):
-        with gzip.open(tmp, 'wb') as f:
-            f.write(data)
+        # Use GzipFile with explicit name so the internal gzip header
+        # contains the .DAT name, not the .tmp filename
+        dat_name = os.path.basename(filepath)[:-3]  # strip .gz
+        with open(tmp, 'wb') as raw_f:
+            with gzip.GzipFile(dat_name, 'wb', fileobj=raw_f) as f:
+                f.write(data)
     else:
         with open(tmp, 'wb') as f:
             f.write(data)
@@ -98,7 +102,7 @@ def read_file(filepath):
     return values
 
 
-def set_file(filepath, value):
+def set_file(filepath, value, overwrite=False):
     """Set version_minor for all valid blocks in a DAT file."""
     data = bytearray(read_data(filepath))
 
@@ -118,7 +122,7 @@ def set_file(filepath, value):
             struct.pack_into("B", data, offset, value)
             modified = True
 
-    if modified:
+    if modified or overwrite:
         # Write to temp file and rename to break hard links
         write_data(filepath, data)
 
@@ -141,8 +145,8 @@ def process_read(args):
 
 def process_set(args):
     """Worker for setting version_minor in a file."""
-    filepath, filename, value = args
-    if set_file(filepath, value):
+    filepath, filename, value, overwrite = args
+    if set_file(filepath, value, overwrite):
         return f"{filename}: set to {value}"
     else:
         return f"{filename}: no valid blocks"
@@ -155,6 +159,8 @@ def main():
                         help='Set version_minor to N (0-255) for all valid blocks')
     parser.add_argument('--parallel', type=int, metavar='N', default=1,
                         help='Number of parallel workers (default: 1)')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Rewrite all files even if version_minor unchanged (fixes gzip internal name)')
     args = parser.parse_args()
 
     if args.set_value is not None and not (0 <= args.set_value <= 255):
@@ -174,7 +180,7 @@ def main():
     total = len(files)
 
     if args.set_value is not None:
-        work = [(os.path.join(args.directory, f), f, args.set_value) for f in files]
+        work = [(os.path.join(args.directory, f), f, args.set_value, args.overwrite) for f in files]
         if args.parallel > 1:
             with Pool(args.parallel) as pool:
                 for i, result in enumerate(pool.imap(process_set, work)):
